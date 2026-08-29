@@ -1,0 +1,28 @@
+{
+  "storeSlug": "sample-restaurant",
+  "storeName": "サンプル食堂",
+  "calendarId": "primary",
+  "sheetName": "予約一覧",
+  "timezone": "Asia/Tokyo",
+  "businessStartHour": 11,
+  "businessEndHour": 22,
+  "closedWeekdays": [1],
+  "slotMinutes": 30,
+  "maxDaysAhead": 60,
+  "seatsTotal": 20,
+  "partySizeMax": 8,
+  "notifyEmail": "",
+  "adminPassword": "changeme",
+  "waitlistEnabled": true,
+  "liffId": "",
+  "rateLimit": {
+    "minIntervalSecPerPhone": 30,
+    "maxSubmissionsPerWindow": 20,
+    "windowSec": 60
+  },
+  "courses": [
+    { "name": "ディナーコース", "duration": 120 },
+    { "name": "ランチ", "duration": 60 },
+    { "name": "お食事のみ(コース注文なし)", "duration": 90 }
+  ]
+}

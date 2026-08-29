@@ -1,0 +1,1110 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <style>
+    :root {
+      --main: #b5502f;
+      --main-dark: #7c3a22;
+      --bg: #faf6f2;
+      --border: #e3d9d0;
+      --text: #2b2b2b;
+      --danger: #c0392b;
+      --danger-bg: #fbebe9;
+      --ok: #2f7a5f;
+      --edit: #2f6f9c;
+      --edit-bg: #eaf3f9;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 24px 16px 60px;
+      font-size: 15px;
+    }
+    .card {
+      max-width: 720px;
+      margin: 0 auto;
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      padding: 28px 24px;
+    }
+    h1 {
+      font-size: 20px;
+      text-align: center;
+      color: var(--main-dark);
+      margin: 0 0 20px;
+    }
+    .hint {
+      font-size: 13px;
+      color: #777;
+      text-align: center;
+      margin: -12px 0 20px;
+    }
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: bold;
+      margin: 12px 0 6px;
+    }
+    input[type="password"], input[type="date"] {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 16px;
+    }
+    button {
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    button#loginBtn {
+      width: 100%;
+      margin-top: 20px;
+      padding: 14px;
+      background: var(--main);
+      color: #fff;
+      font-size: 16px;
+    }
+    button#loginBtn:disabled { background: #aaa; cursor: not-allowed; }
+    #loginMsg { margin-top: 12px; font-size: 13px; color: var(--danger); text-align: center; }
+
+    .dateRow {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .dateRow label { margin: 0; white-space: nowrap; }
+    .dateRow input[type="date"] { width: auto; flex: 1; min-width: 150px; }
+    .dateRow .spacer { flex: 1; }
+    button#logoutBtn {
+      background: #eee;
+      color: #555;
+      padding: 10px 14px;
+      font-size: 13px;
+      font-weight: normal;
+    }
+
+    /* ---- 3つの大きな操作ボタン ---- */
+    .actionBar {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+    @media (min-width: 520px) {
+      .actionBar { grid-template-columns: 1fr 1fr 1fr; }
+    }
+    .actionBar button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 16px 10px;
+      font-size: 15px;
+      border-radius: 999px;
+      border: 2px solid transparent;
+      min-height: 56px;
+    }
+    .icon { display: inline-block; vertical-align: -3px; flex-shrink: 0; }
+    button#newBtn { background: var(--main); color: #fff; }
+    button#newBtn.active { background: var(--main-dark); }
+    button#editModeBtn { background: var(--edit-bg); color: var(--edit); border-color: var(--edit); }
+    button#editModeBtn.active { background: var(--edit); color: #fff; }
+    button#cancelModeBtn { background: var(--danger-bg); color: var(--danger); border-color: var(--danger); }
+    button#cancelModeBtn.active { background: var(--danger); color: #fff; }
+
+    /* ---- 選択モードの案内バナー ---- */
+    #modeBanner {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 12px 16px;
+      border-radius: 10px;
+      margin-bottom: 14px;
+      font-size: 14px;
+      font-weight: bold;
+    }
+    #modeBanner.edit { background: var(--edit-bg); color: var(--edit); border: 1px solid var(--edit); }
+    #modeBanner.cancel { background: var(--danger-bg); color: var(--danger); border: 1px solid var(--danger); }
+    #modeBanner button {
+      background: #fff;
+      border: 1px solid currentColor;
+      color: inherit;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: normal;
+      white-space: nowrap;
+    }
+    #modeBannerText { display: inline-flex; align-items: center; gap: 6px; }
+
+    .summary {
+      font-size: 14px;
+      margin-bottom: 14px;
+      padding: 10px 14px;
+      background: var(--bg);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+    .summary b { color: var(--main-dark); }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th, td {
+      border-bottom: 1px solid var(--border);
+      padding: 10px 6px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { color: #666; font-weight: bold; font-size: 12px; }
+    tr.cancelled { color: #aaa; text-decoration: line-through; }
+    tr.selectable { cursor: pointer; }
+    tr.selectable:hover, tr.selectable:active { background: var(--bg); }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: bold;
+    }
+    .badge.confirmed { background: #e5f3ec; color: var(--ok); }
+    .badge.cancelled { background: #f3e5e5; color: var(--danger); }
+    .badge.waitlist { background: #fdf1de; color: #a3701f; }
+    .badge.line { background: #e3f9ea; color: #06a54a; margin-left: 4px; }
+    .selectHint { font-weight: bold; white-space: nowrap; }
+    button.promoteBtn {
+      background: #fff;
+      border: 1px solid var(--ok);
+      color: var(--ok);
+      padding: 6px 10px;
+      font-size: 12px;
+    }
+    button.promoteBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+    #listMsg { text-align: center; color: #888; padding: 20px 0; font-size: 13px; }
+    .notes { max-width: 160px; white-space: pre-wrap; word-break: break-word; color: #555; }
+
+    /* ---- スマホ幅ではテーブルをカード表示に切り替える ---- */
+    @media (max-width: 680px) {
+      table, thead, tbody, tr { display: block; width: 100%; }
+      thead { display: none; }
+      tbody tr {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        margin-bottom: 10px;
+        padding: 6px 14px;
+        background: #fff;
+      }
+      tbody tr.selectable { border-color: currentColor; }
+      tbody td {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 10px;
+        border-bottom: none;
+        padding: 6px 0;
+      }
+      tbody td[data-label]::before {
+        content: attr(data-label);
+        color: #888;
+        font-size: 11px;
+        font-weight: bold;
+        flex-shrink: 0;
+        padding-top: 2px;
+      }
+      tbody td.notes { text-align: right; }
+    }
+
+    .settingsRow { text-align: right; margin: -6px 0 14px; }
+    button#coursesBtn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: none;
+      border: none;
+      color: #888;
+      font-size: 12px;
+      font-weight: normal;
+      text-decoration: underline;
+      padding: 4px 2px;
+    }
+
+    #addCard, #editCard, #coursesCard {
+      display: none;
+      margin-bottom: 18px;
+      padding: 18px;
+      border: 1px dashed var(--border);
+      border-radius: 10px;
+    }
+    #addCard h2, #editCard h2, #coursesCard h2 {
+      font-size: 15px;
+      margin: 0 0 4px;
+      color: var(--main-dark);
+    }
+    .courseRow { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+    .courseRow input {
+      padding: 9px 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 16px;
+    }
+    .courseRow .courseName { flex: 1; min-width: 0; }
+    .courseRow .courseDuration { width: 64px; flex: none; }
+    .courseRow .courseUnit { font-size: 13px; color: #777; white-space: nowrap; flex: none; }
+    button.courseRemoveBtn {
+      background: #fff;
+      border: 1px solid var(--danger);
+      color: var(--danger);
+      padding: 9px 10px;
+      font-size: 12px;
+      font-weight: normal;
+      flex: none;
+    }
+    button#coursesAddRowBtn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: #fff;
+      border: 1px solid var(--main);
+      color: var(--main);
+      padding: 8px 14px;
+      font-size: 13px;
+      margin: 4px 0 4px;
+    }
+    button#coursesResetBtn {
+      background: none;
+      border: none;
+      color: #888;
+      font-size: 12px;
+      font-weight: normal;
+      text-decoration: underline;
+      margin-top: 14px;
+      display: block;
+      padding: 4px 0;
+    }
+    #addCard input[type="text"], #addCard input[type="tel"], #addCard input[type="email"],
+    #addCard input[type="date"], #addCard input[type="time"], #addCard input[type="number"],
+    #addCard select, #addCard textarea,
+    #editCard input[type="text"], #editCard input[type="tel"], #editCard input[type="email"],
+    #editCard input[type="date"], #editCard input[type="time"], #editCard input[type="number"],
+    #editCard select, #editCard textarea {
+      width: 100%;
+      padding: 11px 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 16px;
+    }
+    #addCard textarea, #editCard textarea { resize: vertical; min-height: 50px; }
+    .addRow2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    details.moreFields { margin-top: 14px; }
+    details.moreFields summary {
+      cursor: pointer;
+      color: var(--main-dark);
+      font-size: 13px;
+      font-weight: bold;
+      padding: 4px 0;
+      list-style: none;
+    }
+    details.moreFields summary::-webkit-details-marker { display: none; }
+    details.moreFields summary::before { content: '▶ '; font-size: 10px; }
+    details.moreFields[open] summary::before { content: '▼ '; }
+    .forceRow {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      margin-top: 16px;
+      padding: 10px 12px;
+      background: var(--bg);
+      border-radius: 8px;
+      font-size: 12px;
+      color: #777;
+      font-weight: normal;
+    }
+    .forceRow input { width: auto; margin-top: 3px; flex-shrink: 0; }
+    .forceRow div b { display: block; color: #555; font-size: 13px; margin-bottom: 2px; }
+    button#addSubmitBtn, button#editSubmitBtn, button#coursesSubmitBtn {
+      background: var(--main);
+      color: #fff;
+      padding: 13px 18px;
+      font-size: 15px;
+      margin-top: 18px;
+      margin-right: 8px;
+    }
+    button#addSubmitBtn:disabled, button#editSubmitBtn:disabled, button#coursesSubmitBtn:disabled { background: #aaa; cursor: not-allowed; }
+    button#addCancelBtn, button#editCancelBtn, button#coursesCancelBtn {
+      background: #eee;
+      color: #555;
+      padding: 13px 18px;
+      font-size: 15px;
+      font-weight: normal;
+      margin-top: 18px;
+    }
+    #addMsg, #editMsg, #coursesMsg { margin-top: 10px; font-size: 13px; color: var(--danger); }
+  </style>
+</head>
+<body>
+  <div class="card" id="loginCard">
+    <h1 id="loginTitle">予約管理ログイン</h1>
+    <label>管理パスワード</label>
+    <input type="password" id="password" placeholder="パスワードを入力">
+    <button id="loginBtn">ログイン</button>
+    <div id="loginMsg"></div>
+  </div>
+
+  <div class="card" id="dashCard" style="display:none;">
+    <h1 id="dashTitle">予約管理</h1>
+    <div class="dateRow">
+      <label>日付</label>
+      <input type="date" id="targetDate">
+      <div class="spacer"></div>
+      <button id="logoutBtn">ログアウト</button>
+    </div>
+
+    <div class="actionBar">
+      <button id="newBtn"><span class="icon" data-icon="plus" data-icon-size="16"></span>新規予約を追加</button>
+      <button id="editModeBtn"><span class="icon" data-icon="pencil" data-icon-size="16"></span>予約を変更する</button>
+      <button id="cancelModeBtn"><span class="icon" data-icon="xmark" data-icon-size="16"></span>予約をキャンセルする</button>
+    </div>
+
+    <div class="settingsRow">
+      <button id="coursesBtn" type="button"><span class="icon" data-icon="gear" data-icon-size="14"></span>コースの設定</button>
+    </div>
+
+    <div id="modeBanner">
+      <span id="modeBannerText"></span>
+      <button id="modeBannerStop">やめる</button>
+    </div>
+
+    <div id="addCard">
+      <h2>新規予約の登録(電話予約など)</h2>
+      <label>お名前<span style="color:var(--danger);font-weight:normal;font-size:11px;"> 必須</span></label>
+      <input type="text" id="addName">
+
+      <div class="addRow2">
+        <div>
+          <label>電話番号<span style="color:var(--danger);font-weight:normal;font-size:11px;"> 必須</span></label>
+          <input type="tel" id="addPhone" placeholder="090-1234-5678">
+        </div>
+        <div>
+          <label>人数<span style="color:var(--danger);font-weight:normal;font-size:11px;"> 必須</span></label>
+          <input type="number" id="addPartySize" min="1" value="2">
+        </div>
+      </div>
+
+      <label>コース<span style="color:var(--danger);font-weight:normal;font-size:11px;"> 必須</span></label>
+      <select id="addCourse"></select>
+
+      <div class="addRow2">
+        <div>
+          <label>予約日<span style="color:var(--danger);font-weight:normal;font-size:11px;"> 必須</span></label>
+          <input type="date" id="addDate">
+        </div>
+        <div>
+          <label>予約時間<span style="color:var(--danger);font-weight:normal;font-size:11px;"> 必須</span></label>
+          <input type="time" id="addTime">
+        </div>
+      </div>
+
+      <details class="moreFields">
+        <summary>その他の項目(フリガナ・メール・ご要望)</summary>
+        <label>フリガナ</label>
+        <input type="text" id="addKana">
+        <label>メールアドレス</label>
+        <input type="email" id="addEmail" placeholder="(任意。入力すると確認メールを送信)">
+        <label>ご要望</label>
+        <textarea id="addNotes"></textarea>
+      </details>
+
+      <label class="forceRow">
+        <input type="checkbox" id="addForce">
+        <div><b>満席・定休日でも登録する</b>通常はチェック不要です。特別に対応したいときだけチェックしてください。</div>
+      </label>
+
+      <div>
+        <button id="addSubmitBtn">この内容で登録する</button>
+        <button id="addCancelBtn">やめる</button>
+      </div>
+      <div id="addMsg"></div>
+    </div>
+
+    <div id="editCard">
+      <h2>予約内容の変更</h2>
+      <input type="hidden" id="editRowIndex">
+      <label>お名前<span style="color:var(--danger);font-weight:normal;font-size:11px;"> 必須</span></label>
+      <input type="text" id="editName">
+
+      <div class="addRow2">
+        <div>
+          <label>電話番号<span style="color:var(--danger);font-weight:normal;font-size:11px;"> 必須</span></label>
+          <input type="tel" id="editPhone" placeholder="090-1234-5678">
+        </div>
+        <div>
+          <label>人数<span style="color:var(--danger);font-weight:normal;font-size:11px;"> 必須</span></label>
+          <input type="number" id="editPartySize" min="1">
+        </div>
+      </div>
+
+      <label>コース<span style="color:var(--danger);font-weight:normal;font-size:11px;"> 必須</span></label>
+      <select id="editCourse"></select>
+
+      <div class="addRow2">
+        <div>
+          <label>予約日<span style="color:var(--danger);font-weight:normal;font-size:11px;"> 必須</span></label>
+          <input type="date" id="editDate">
+        </div>
+        <div>
+          <label>予約時間<span style="color:var(--danger);font-weight:normal;font-size:11px;"> 必須</span></label>
+          <input type="time" id="editTime">
+        </div>
+      </div>
+
+      <details class="moreFields">
+        <summary>その他の項目(フリガナ・メール・ご要望)</summary>
+        <label>フリガナ</label>
+        <input type="text" id="editKana">
+        <label>メールアドレス</label>
+        <input type="email" id="editEmail" placeholder="(任意)">
+        <label>ご要望</label>
+        <textarea id="editNotes"></textarea>
+      </details>
+
+      <label class="forceRow">
+        <input type="checkbox" id="editForce">
+        <div><b>満席の時間帯でも変更する</b>通常はチェック不要です。満席の時間に移したいときだけチェックしてください。</div>
+      </label>
+
+      <div>
+        <button id="editSubmitBtn">この内容に変更する</button>
+        <button id="editCancelBtn">やめる</button>
+      </div>
+      <div id="editMsg"></div>
+    </div>
+
+    <div id="coursesCard">
+      <h2>コース設定</h2>
+      <p style="font-size:13px;color:#777;margin:0 0 14px;">予約フォームや電話予約で選べるコースです。滞在時間(分)は空席の計算に使われるので、実際にお客様が滞在する時間の目安を入れてください。</p>
+      <div id="coursesRows"></div>
+      <button id="coursesAddRowBtn" type="button"><span class="icon" data-icon="plus" data-icon-size="14"></span>コースを追加</button>
+
+      <div>
+        <button id="coursesSubmitBtn">この内容で保存する</button>
+        <button id="coursesCancelBtn">やめる</button>
+      </div>
+      <button id="coursesResetBtn" type="button">初期設定に戻す</button>
+      <div id="coursesMsg"></div>
+    </div>
+
+    <div class="summary" id="summary"></div>
+    <div id="listMsg"></div>
+    <table id="table" style="display:none;">
+      <thead>
+        <tr>
+          <th>時間</th><th>人数</th><th>コース</th><th>お名前</th><th>電話</th><th>メール</th><th>ご要望</th><th>状態</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+
+  <script>
+    var TOKEN = sessionStorage.getItem('adminToken') || null;
+    var MODE = null; // null | 'edit' | 'cancel' … 一覧の予約をタップした時の動作
+    var LAST_RESERVATIONS = [];
+
+    // ---- アイコン(絵文字の代わりに使うオリジナルSVG。currentColorでボタン/文字の色を継承する) ----
+    var ICONS = {
+      plus: '<path d="M11 4h2v7h7v2h-7v7h-2v-7H4v-2h7z" fill="currentColor"/>',
+      pencil: '<line x1="19" y1="5" x2="9" y2="15" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>' +
+        '<path d="M9 15 L4 20 L6 21 L11 17 Z" fill="currentColor"/>' +
+        '<line x1="17" y1="3" x2="21" y2="7" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>',
+      xmark: '<line x1="5" y1="5" x2="19" y2="19" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>' +
+        '<line x1="19" y1="5" x2="5" y2="19" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>',
+      gear: '<circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2.5"/>' +
+        '<g fill="currentColor">' +
+        '<rect x="10.5" y="1" width="3" height="4" rx="1"/><rect x="10.5" y="19" width="3" height="4" rx="1"/>' +
+        '<rect x="1" y="10.5" width="4" height="3" rx="1"/><rect x="19" y="10.5" width="4" height="3" rx="1"/>' +
+        '<rect x="10.5" y="1" width="3" height="4" rx="1" transform="rotate(45 12 12)"/>' +
+        '<rect x="10.5" y="19" width="3" height="4" rx="1" transform="rotate(45 12 12)"/>' +
+        '<rect x="1" y="10.5" width="4" height="3" rx="1" transform="rotate(45 12 12)"/>' +
+        '<rect x="19" y="10.5" width="4" height="3" rx="1" transform="rotate(45 12 12)"/>' +
+        '</g>',
+    };
+
+    function iconHtml(key, size) {
+      size = size || 16;
+      return '<svg class="icon" viewBox="0 0 24 24" width="' + size + '" height="' + size + '" aria-hidden="true">' + (ICONS[key] || '') + '</svg>';
+    }
+
+    /**
+     * HTML内に静的に置いた data-icon="キー" 要素に、対応するSVGアイコンを流し込む。
+     */
+    function hydrateStaticIcons() {
+      document.querySelectorAll('[data-icon]').forEach(function (el) {
+        var size = parseInt(el.dataset.iconSize, 10) || 16;
+        el.innerHTML = iconHtml(el.dataset.icon, size);
+      });
+    }
+
+    function pad(n) { return n < 10 ? '0' + n : '' + n; }
+    function toDateStr(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+
+    function init() {
+      hydrateStaticIcons();
+      document.getElementById('targetDate').value = toDateStr(new Date());
+      document.getElementById('loginBtn').addEventListener('click', doLogin);
+      document.getElementById('password').addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') doLogin();
+      });
+      document.getElementById('logoutBtn').addEventListener('click', doLogout);
+      document.getElementById('targetDate').addEventListener('change', loadList);
+      document.getElementById('newBtn').addEventListener('click', function () { toggleAddForm(true); });
+      document.getElementById('addCancelBtn').addEventListener('click', function () { toggleAddForm(false); });
+      document.getElementById('addSubmitBtn').addEventListener('click', doAddReservation);
+      document.getElementById('editCancelBtn').addEventListener('click', function () { toggleEditForm(false); });
+      document.getElementById('editSubmitBtn').addEventListener('click', doUpdateReservation);
+      document.getElementById('editModeBtn').addEventListener('click', function () { setMode(MODE === 'edit' ? null : 'edit'); });
+      document.getElementById('cancelModeBtn').addEventListener('click', function () { setMode(MODE === 'cancel' ? null : 'cancel'); });
+      document.getElementById('modeBannerStop').addEventListener('click', function () { setMode(null); });
+      document.getElementById('coursesBtn').addEventListener('click', function () { toggleCoursesForm(true); });
+      document.getElementById('coursesCancelBtn').addEventListener('click', function () { toggleCoursesForm(false); });
+      document.getElementById('coursesAddRowBtn').addEventListener('click', function () {
+        document.getElementById('coursesRows').appendChild(buildCourseRow({ name: '', duration: 60 }));
+      });
+      document.getElementById('coursesSubmitBtn').addEventListener('click', doSaveCourses);
+      document.getElementById('coursesResetBtn').addEventListener('click', doResetCourses);
+
+      google.script.run.withSuccessHandler(onAdminConfig).getConfig();
+
+      if (TOKEN) {
+        showDashboard();
+        loadList();
+      }
+    }
+
+    function onAdminConfig(cfg) {
+      ['addCourse', 'editCourse'].forEach(function (id) {
+        var sel = document.getElementById(id);
+        sel.innerHTML = '';
+        (cfg.courses || []).forEach(function (c) {
+          var opt = document.createElement('option');
+          opt.value = c.name;
+          opt.textContent = c.name + '(' + c.duration + '分)';
+          sel.appendChild(opt);
+        });
+      });
+    }
+
+    // ---- 「変更する」「キャンセルする」の選択モード ----
+    function setMode(mode) {
+      MODE = mode;
+      if (mode) {
+        toggleAddForm(false);
+        toggleEditForm(false);
+        document.getElementById('coursesCard').style.display = 'none';
+      }
+
+      document.getElementById('editModeBtn').classList.toggle('active', mode === 'edit');
+      document.getElementById('cancelModeBtn').classList.toggle('active', mode === 'cancel');
+
+      var banner = document.getElementById('modeBanner');
+      if (mode === 'edit') {
+        banner.className = 'edit';
+        banner.style.display = 'flex';
+        document.getElementById('modeBannerText').innerHTML = iconHtml('pencil', 16) + '変更したい予約を下の一覧からタップしてください';
+      } else if (mode === 'cancel') {
+        banner.className = 'cancel';
+        banner.style.display = 'flex';
+        document.getElementById('modeBannerText').innerHTML = iconHtml('xmark', 16) + 'キャンセルしたい予約を下の一覧からタップしてください';
+      } else {
+        banner.style.display = 'none';
+      }
+
+      renderList(); // 選択モードの見た目(タップ可能表示)を反映するため再描画
+    }
+
+    function toggleAddForm(show) {
+      if (show) { setMode(null); toggleEditForm(false); document.getElementById('coursesCard').style.display = 'none'; }
+      document.getElementById('addCard').style.display = show ? 'block' : 'none';
+      if (show) {
+        document.getElementById('addDate').value = document.getElementById('targetDate').value;
+        document.getElementById('addMsg').textContent = '';
+        document.getElementById('addCard').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else {
+        document.getElementById('addName').value = '';
+        document.getElementById('addKana').value = '';
+        document.getElementById('addPhone').value = '';
+        document.getElementById('addEmail').value = '';
+        document.getElementById('addPartySize').value = 2;
+        document.getElementById('addTime').value = '';
+        document.getElementById('addNotes').value = '';
+        document.getElementById('addForce').checked = false;
+      }
+    }
+
+    function toggleEditForm(show, row) {
+      if (show) { setMode(null); toggleAddForm(false); document.getElementById('coursesCard').style.display = 'none'; }
+      document.getElementById('editCard').style.display = show ? 'block' : 'none';
+      if (show && row) {
+        document.getElementById('editRowIndex').value = row.rowIndex;
+        document.getElementById('editName').value = row.name || '';
+        document.getElementById('editKana').value = row.kana || '';
+        document.getElementById('editPhone').value = row.phone || '';
+        document.getElementById('editEmail').value = row.email || '';
+        document.getElementById('editPartySize').value = row.partySize || 2;
+        document.getElementById('editCourse').value = row.course || '';
+        document.getElementById('editDate').value = document.getElementById('targetDate').value;
+        document.getElementById('editTime').value = row.time || '';
+        document.getElementById('editNotes').value = row.notes || '';
+        document.getElementById('editForce').checked = false;
+        document.getElementById('editMsg').textContent = '';
+        document.getElementById('editCard').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+
+    function doAddReservation() {
+      var form = {
+        name: document.getElementById('addName').value.trim(),
+        kana: document.getElementById('addKana').value.trim(),
+        phone: document.getElementById('addPhone').value.trim(),
+        email: document.getElementById('addEmail').value.trim(),
+        partySize: document.getElementById('addPartySize').value,
+        course: document.getElementById('addCourse').value,
+        date: document.getElementById('addDate').value,
+        time: document.getElementById('addTime').value,
+        notes: document.getElementById('addNotes').value.trim(),
+        force: document.getElementById('addForce').checked,
+      };
+
+      if (!form.name || !form.phone || !form.date || !form.time || !form.course || !form.partySize) {
+        document.getElementById('addMsg').textContent = '必須項目(お名前・電話番号・予約日・予約時間・コース・人数)を入力してください。';
+        return;
+      }
+
+      var btn = document.getElementById('addSubmitBtn');
+      btn.disabled = true;
+      btn.textContent = '登録中...';
+
+      google.script.run
+        .withSuccessHandler(function (res) {
+          btn.disabled = false;
+          btn.textContent = 'この内容で登録する';
+          if (res.authError) {
+            doLogout();
+            document.getElementById('loginMsg').textContent = res.message;
+            return;
+          }
+          if (res.success) {
+            toggleAddForm(false);
+            loadList();
+          } else {
+            document.getElementById('addMsg').textContent = res.message;
+          }
+        })
+        .withFailureHandler(function (err) {
+          btn.disabled = false;
+          btn.textContent = 'この内容で登録する';
+          document.getElementById('addMsg').textContent = 'エラー: ' + err.message;
+        })
+        .createReservationAdmin(TOKEN, form);
+    }
+
+    function doUpdateReservation() {
+      var rowIndex = Number(document.getElementById('editRowIndex').value);
+      var form = {
+        name: document.getElementById('editName').value.trim(),
+        kana: document.getElementById('editKana').value.trim(),
+        phone: document.getElementById('editPhone').value.trim(),
+        email: document.getElementById('editEmail').value.trim(),
+        partySize: document.getElementById('editPartySize').value,
+        course: document.getElementById('editCourse').value,
+        date: document.getElementById('editDate').value,
+        time: document.getElementById('editTime').value,
+        notes: document.getElementById('editNotes').value.trim(),
+        force: document.getElementById('editForce').checked,
+      };
+
+      if (!form.name || !form.phone || !form.date || !form.time || !form.course || !form.partySize) {
+        document.getElementById('editMsg').textContent = '必須項目(お名前・電話番号・予約日・予約時間・コース・人数)を入力してください。';
+        return;
+      }
+
+      var btn = document.getElementById('editSubmitBtn');
+      btn.disabled = true;
+      btn.textContent = '変更中...';
+
+      google.script.run
+        .withSuccessHandler(function (res) {
+          btn.disabled = false;
+          btn.textContent = 'この内容に変更する';
+          if (res.authError) {
+            doLogout();
+            document.getElementById('loginMsg').textContent = res.message;
+            return;
+          }
+          if (res.success) {
+            toggleEditForm(false);
+            loadList();
+          } else {
+            document.getElementById('editMsg').textContent = res.message;
+          }
+        })
+        .withFailureHandler(function (err) {
+          btn.disabled = false;
+          btn.textContent = 'この内容に変更する';
+          document.getElementById('editMsg').textContent = 'エラー: ' + err.message;
+        })
+        .updateReservationAdmin(TOKEN, rowIndex, form);
+    }
+
+    function toggleCoursesForm(show) {
+      if (show) { setMode(null); toggleAddForm(false); toggleEditForm(false); }
+      document.getElementById('coursesCard').style.display = show ? 'block' : 'none';
+      if (show) {
+        document.getElementById('coursesMsg').textContent = '';
+        document.getElementById('coursesRows').innerHTML = '<div style="color:#888;font-size:13px;">読み込み中...</div>';
+        document.getElementById('coursesCard').scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        google.script.run
+          .withSuccessHandler(function (res) {
+            if (res.authError) {
+              doLogout();
+              document.getElementById('loginMsg').textContent = res.message;
+              return;
+            }
+            if (res.success) {
+              renderCourseRows(res.courses);
+            } else {
+              document.getElementById('coursesRows').innerHTML = '';
+              document.getElementById('coursesMsg').textContent = res.message || '取得に失敗しました。';
+            }
+          })
+          .withFailureHandler(function (err) {
+            document.getElementById('coursesRows').innerHTML = '';
+            document.getElementById('coursesMsg').textContent = 'エラー: ' + err.message;
+          })
+          .getCoursesForAdmin(TOKEN);
+      }
+    }
+
+    function renderCourseRows(courses) {
+      var wrap = document.getElementById('coursesRows');
+      wrap.innerHTML = '';
+      (courses || []).forEach(function (c) { wrap.appendChild(buildCourseRow(c)); });
+    }
+
+    function buildCourseRow(course) {
+      var row = document.createElement('div');
+      row.className = 'courseRow';
+
+      var nameInput = document.createElement('input');
+      nameInput.type = 'text';
+      nameInput.className = 'courseName';
+      nameInput.placeholder = 'コース名(例: ディナーコース)';
+      nameInput.value = (course && course.name) || '';
+
+      var durationInput = document.createElement('input');
+      durationInput.type = 'number';
+      durationInput.className = 'courseDuration';
+      durationInput.min = '1';
+      durationInput.value = (course && course.duration) || 60;
+
+      var unit = document.createElement('span');
+      unit.className = 'courseUnit';
+      unit.textContent = '分';
+
+      var removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'courseRemoveBtn';
+      removeBtn.textContent = '削除';
+      removeBtn.addEventListener('click', function () {
+        if (document.getElementById('coursesRows').children.length <= 1) {
+          alert('コースは少なくとも1つ必要です。');
+          return;
+        }
+        row.remove();
+      });
+
+      row.appendChild(nameInput);
+      row.appendChild(durationInput);
+      row.appendChild(unit);
+      row.appendChild(removeBtn);
+      return row;
+    }
+
+    function collectCourses() {
+      return Array.prototype.map.call(document.querySelectorAll('#coursesRows .courseRow'), function (row) {
+        return {
+          name: row.querySelector('.courseName').value.trim(),
+          duration: row.querySelector('.courseDuration').value,
+        };
+      });
+    }
+
+    function doSaveCourses() {
+      var courses = collectCourses();
+      var btn = document.getElementById('coursesSubmitBtn');
+      btn.disabled = true;
+      btn.textContent = '保存中...';
+
+      google.script.run
+        .withSuccessHandler(function (res) {
+          btn.disabled = false;
+          btn.textContent = 'この内容で保存する';
+          if (res.authError) {
+            doLogout();
+            document.getElementById('loginMsg').textContent = res.message;
+            return;
+          }
+          if (res.success) {
+            toggleCoursesForm(false);
+            google.script.run.withSuccessHandler(onAdminConfig).getConfig();
+          } else {
+            document.getElementById('coursesMsg').textContent = res.message;
+          }
+        })
+        .withFailureHandler(function (err) {
+          btn.disabled = false;
+          btn.textContent = 'この内容で保存する';
+          document.getElementById('coursesMsg').textContent = 'エラー: ' + err.message;
+        })
+        .updateCoursesAdmin(TOKEN, courses);
+    }
+
+    function doResetCourses() {
+      if (!confirm('コース設定を初期状態に戻します。よろしいですか?')) return;
+
+      google.script.run
+        .withSuccessHandler(function (res) {
+          if (res.authError) {
+            doLogout();
+            document.getElementById('loginMsg').textContent = res.message;
+            return;
+          }
+          if (res.success) {
+            renderCourseRows(res.courses);
+            document.getElementById('coursesMsg').textContent = '';
+            google.script.run.withSuccessHandler(onAdminConfig).getConfig();
+          } else {
+            document.getElementById('coursesMsg').textContent = res.message;
+          }
+        })
+        .withFailureHandler(function (err) {
+          document.getElementById('coursesMsg').textContent = 'エラー: ' + err.message;
+        })
+        .resetCoursesAdmin(TOKEN);
+    }
+
+    function doLogin() {
+      var pw = document.getElementById('password').value;
+      if (!pw) return;
+      var btn = document.getElementById('loginBtn');
+      btn.disabled = true;
+      btn.textContent = 'ログイン中...';
+      google.script.run
+        .withSuccessHandler(function (res) {
+          btn.disabled = false;
+          btn.textContent = 'ログイン';
+          if (res.success) {
+            TOKEN = res.token;
+            sessionStorage.setItem('adminToken', TOKEN);
+            if (res.storeName) {
+              document.getElementById('loginTitle').textContent = res.storeName + ' 予約管理ログイン';
+              document.getElementById('dashTitle').textContent = res.storeName + ' 予約管理';
+            }
+            showDashboard();
+            loadList();
+          } else {
+            document.getElementById('loginMsg').textContent = res.message;
+          }
+        })
+        .withFailureHandler(function (err) {
+          btn.disabled = false;
+          btn.textContent = 'ログイン';
+          document.getElementById('loginMsg').textContent = 'エラー: ' + err.message;
+        })
+        .adminLogin(pw);
+    }
+
+    function doLogout() {
+      TOKEN = null;
+      sessionStorage.removeItem('adminToken');
+      document.getElementById('dashCard').style.display = 'none';
+      document.getElementById('loginCard').style.display = 'block';
+      document.getElementById('password').value = '';
+    }
+
+    function showDashboard() {
+      document.getElementById('loginCard').style.display = 'none';
+      document.getElementById('dashCard').style.display = 'block';
+    }
+
+    function loadList() {
+      var dateStr = document.getElementById('targetDate').value;
+      if (!TOKEN || !dateStr) return;
+
+      setMode(null);
+      document.getElementById('listMsg').textContent = '読み込み中...';
+      document.getElementById('listMsg').style.display = 'block';
+      document.getElementById('table').style.display = 'none';
+
+      google.script.run
+        .withSuccessHandler(function (res) { onList(res, dateStr); })
+        .withFailureHandler(function (err) {
+          document.getElementById('listMsg').textContent = '取得エラー: ' + err.message;
+        })
+        .getReservationsForAdmin(TOKEN, dateStr);
+    }
+
+    function onList(res, dateStr) {
+      if (res.authError) {
+        doLogout();
+        document.getElementById('loginMsg').textContent = res.message;
+        return;
+      }
+      if (!res.success) {
+        document.getElementById('listMsg').textContent = res.message || '取得に失敗しました。';
+        return;
+      }
+
+      document.getElementById('summary').innerHTML =
+        dateStr + ' の予約: <b>' + res.reservedSeats + ' / ' + res.seatsTotal + ' 席</b>' +
+        '(残り約 ' + Math.max(0, res.seatsTotal - res.reservedSeats) + ' 席, ' +
+        res.reservations.filter(function (x) { return x.status === '予約確定'; }).length + '組)' +
+        (res.waitlistCount ? ' / キャンセル待ち <b>' + res.waitlistCount + '組</b>' : '');
+
+      LAST_RESERVATIONS = res.reservations;
+      renderList();
+    }
+
+    function renderList() {
+      var tbody = document.getElementById('tbody');
+      tbody.innerHTML = '';
+
+      if (LAST_RESERVATIONS.length === 0) {
+        document.getElementById('listMsg').textContent = 'この日の予約はありません。';
+        document.getElementById('listMsg').style.display = 'block';
+        document.getElementById('table').style.display = 'none';
+        return;
+      }
+      document.getElementById('listMsg').style.display = 'none';
+      document.getElementById('table').style.display = 'table';
+
+      LAST_RESERVATIONS.forEach(function (row) {
+        var tr = document.createElement('tr');
+        var isCancelled = row.status === 'キャンセル';
+        var isWaitlist = row.status === 'キャンセル待ち';
+        if (isCancelled) tr.className = 'cancelled';
+
+        var badgeClass = isCancelled ? 'cancelled' : (isWaitlist ? 'waitlist' : 'confirmed');
+        tr.innerHTML =
+          '<td data-label="時間">' + escapeHtml(row.time) + '</td>' +
+          '<td data-label="人数">' + escapeHtml(row.partySize) + '名</td>' +
+          '<td data-label="コース">' + escapeHtml(row.course) + '</td>' +
+          '<td data-label="お名前">' + escapeHtml(row.name) + (row.route === 'LINE' ? '<span class="badge line">LINE</span>' : '') + (row.kana ? '<br><span style="color:#999;font-size:11px;">' + escapeHtml(row.kana) + '</span>' : '') + '</td>' +
+          '<td data-label="電話">' + escapeHtml(row.phone) + '</td>' +
+          '<td data-label="メール">' + escapeHtml(row.email) + '</td>' +
+          '<td class="notes" data-label="ご要望">' + escapeHtml(row.notes) + '</td>' +
+          '<td data-label="状態"><span class="badge ' + badgeClass + '">' + escapeHtml(row.status) + '</span></td>' +
+          '<td></td>';
+
+        var actionTd = tr.lastElementChild;
+
+        if (!isCancelled && (MODE === 'edit' || MODE === 'cancel')) {
+          // 選択モード中: 行全体をタップ可能にする
+          tr.classList.add('selectable');
+          var hint = document.createElement('span');
+          hint.className = 'selectHint';
+          hint.textContent = MODE === 'edit' ? '編集する ›' : 'キャンセルする ›';
+          hint.style.color = MODE === 'edit' ? 'var(--edit)' : 'var(--danger)';
+          actionTd.appendChild(hint);
+          tr.addEventListener('click', function () {
+            if (MODE === 'edit') {
+              toggleEditForm(true, row);
+            } else if (MODE === 'cancel') {
+              doCancel(row);
+            }
+          });
+        } else if (!isCancelled && isWaitlist) {
+          // 通常時: キャンセル待ちだけ「繰り上げ確定」ボタンを表示
+          var promoteBtn = document.createElement('button');
+          promoteBtn.className = 'promoteBtn';
+          promoteBtn.textContent = '繰り上げ確定';
+          promoteBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            doPromote(row, promoteBtn);
+          });
+          actionTd.appendChild(promoteBtn);
+        }
+
+        tbody.appendChild(tr);
+      });
+    }
+
+    function doPromote(row, btn) {
+      if (!confirm('この予約を繰り上げて確定にします。\n\n' + row.time + ' ' + row.name + '様 ' + row.partySize + '名\n\n(現在の空席状況を確認した上で確定します)')) return;
+      btn.disabled = true;
+      btn.textContent = '処理中...';
+      google.script.run
+        .withSuccessHandler(function (res) {
+          if (res.authError) {
+            doLogout();
+            document.getElementById('loginMsg').textContent = res.message;
+            return;
+          }
+          if (res.success) {
+            loadList();
+          } else {
+            alert(res.message);
+            btn.disabled = false;
+            btn.textContent = '繰り上げ確定';
+          }
+        })
+        .withFailureHandler(function (err) {
+          alert('エラー: ' + err.message);
+          btn.disabled = false;
+          btn.textContent = '繰り上げ確定';
+        })
+        .promoteWaitlistAdmin(TOKEN, row.rowIndex, false);
+    }
+
+    function doCancel(row) {
+      if (!confirm('この予約をキャンセルします。よろしいですか?\n\n' + row.time + ' ' + row.name + '様 ' + row.partySize + '名')) return;
+      setMode(null);
+      google.script.run
+        .withSuccessHandler(function (res) {
+          if (res.authError) {
+            doLogout();
+            document.getElementById('loginMsg').textContent = res.message;
+            return;
+          }
+          if (res.success) {
+            loadList();
+          } else {
+            alert(res.message);
+          }
+        })
+        .withFailureHandler(function (err) {
+          alert('エラー: ' + err.message);
+        })
+        .cancelReservationAdmin(TOKEN, row.rowIndex);
+    }
+
+    function escapeHtml(v) {
+      return String(v == null ? '' : v)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    init();
+  </script>
+</body>
+</html>

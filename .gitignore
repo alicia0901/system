@@ -1,0 +1,12 @@
+# 店舗ごとに生成される実際の設定・コード(実際の管理画面パスワードや
+# Google Apps ScriptのスクリプトIDが含まれるため、公開リポジトリには含めない)。
+# 再生成方法は README.md の「他店舗への展開」を参照。
+/stores/
+
+# 店舗設定ファイル(実際のパスワード等を含む)。テンプレートのみ公開する。
+/setup/*.json
+!/setup/store-config.example.json
+
+# OS/エディタ
+.DS_Store
+Thumbs.db

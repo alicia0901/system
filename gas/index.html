@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <style>
+    :root {
+      --main: #b5502f;
+      --main-dark: #7c3a22;
+      --bg: #faf6f2;
+      --border: #e3d9d0;
+      --text: #2b2b2b;
+      --danger: #c0392b;
+      --accent: #ffb703;
+      --accent-soft: #fff3d6;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+      background: var(--bg);
+      background-image:
+        radial-gradient(circle at 8% 12%, #ffe4cc 0%, transparent 40%),
+        radial-gradient(circle at 92% 88%, #ffe9e0 0%, transparent 40%);
+      color: var(--text);
+      margin: 0;
+      padding: 24px 16px 60px;
+    }
+    .card {
+      max-width: 480px;
+      margin: 0 auto;
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 4px 20px rgba(181,80,47,0.12);
+      padding: 28px 24px;
+    }
+    .hero { text-align: center; margin-bottom: 18px; }
+    .heroEmoji { display: inline-block; animation: bounce 2.2s ease-in-out infinite; }
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-6px); }
+    }
+    .icon { display: inline-block; vertical-align: middle; flex-shrink: 0; }
+    .labelIcon { vertical-align: -3px; margin-right: 2px; }
+    .inlineIcon { vertical-align: -3px; margin-right: 4px; }
+    h1 {
+      font-size: 20px;
+      text-align: center;
+      color: var(--main-dark);
+      margin: 6px 0 4px;
+    }
+    .subtitle {
+      text-align: center;
+      font-size: 13px;
+      color: #666;
+      margin-bottom: 22px;
+    }
+
+    /* ---- ステップインジケーター ---- */
+    .steps {
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      margin-bottom: 24px;
+    }
+    .stepDot { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 64px; }
+    .stepDot .circle {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      background: #eee;
+      color: #aaa;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: bold;
+      transition: all .2s;
+    }
+    .stepDot .label { font-size: 10.5px; color: #aaa; font-weight: bold; white-space: nowrap; }
+    .stepDot.active .circle { background: var(--main); color: #fff; transform: scale(1.12); box-shadow: 0 2px 8px rgba(181,80,47,0.35); }
+    .stepDot.active .label { color: var(--main-dark); }
+    .stepDot.done .circle { background: var(--accent); color: #fff; }
+    .stepDot.done .label { color: #a3701f; }
+    .stepLine { width: 30px; height: 3px; background: var(--border); margin: 15px 0 0; border-radius: 2px; }
+    .stepLine.done { background: var(--accent); }
+
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: bold;
+      margin: 16px 0 6px;
+    }
+    label .req {
+      color: var(--danger);
+      font-weight: normal;
+      font-size: 11px;
+      margin-left: 4px;
+    }
+    input[type="text"], input[type="tel"], input[type="email"], input[type="date"],
+    select, textarea {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 15px;
+      background: #fff;
+      color: var(--text);
+    }
+    textarea { resize: vertical; min-height: 70px; }
+    .row2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    /* ---- コース選択カード ---- */
+    .courseCards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+      gap: 10px;
+      margin-top: 6px;
+    }
+    .courseCard {
+      border: 2px solid var(--border);
+      border-radius: 14px;
+      padding: 14px 8px;
+      text-align: center;
+      cursor: pointer;
+      user-select: none;
+      transition: all .15s;
+      background: #fff;
+    }
+    .courseCard:active { transform: scale(0.97); }
+    .courseCard .emoji { line-height: 1; }
+    .courseCard .emoji svg { display: block; margin: 0 auto; }
+    .courseCard .name { font-size: 12.5px; font-weight: bold; margin-top: 6px; }
+    .courseCard .duration { font-size: 10.5px; color: #999; margin-top: 2px; }
+    .courseCard.selected {
+      border-color: var(--main);
+      background: #fff3ec;
+      transform: scale(1.03);
+      box-shadow: 0 2px 10px rgba(181,80,47,0.18);
+    }
+    .courseCard.selected .duration { color: var(--main-dark); }
+
+    /* ---- 人数ステッパー ---- */
+    .partyStepper {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-top: 6px;
+    }
+    .stepperBtn {
+      width: 42px; height: 42px;
+      border-radius: 50%;
+      border: 2px solid var(--main);
+      background: #fff;
+      color: var(--main);
+      font-size: 20px;
+      font-weight: bold;
+      cursor: pointer;
+      line-height: 1;
+    }
+    .stepperBtn:active { background: var(--main); color: #fff; }
+    #partySize {
+      width: 56px;
+      text-align: center;
+      border: none;
+      background: transparent;
+      font-size: 22px;
+      font-weight: bold;
+      color: var(--main-dark);
+      padding: 0;
+    }
+    .partyUnit { font-size: 14px; color: #777; }
+
+    #timeGrid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-top: 6px;
+    }
+    .time-btn {
+      padding: 8px 4px;
+      text-align: center;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 13px;
+      cursor: pointer;
+      background: #fff;
+      user-select: none;
+      transition: transform .1s;
+    }
+    .time-btn:active { transform: scale(0.95); }
+    .time-btn.selected {
+      background: var(--main);
+      border-color: var(--main);
+      color: #fff;
+    }
+    .time-btn.disabled {
+      color: #bbb;
+      background: #f0f0f0;
+      cursor: not-allowed;
+      text-decoration: line-through;
+    }
+    .time-btn.full-waitlist {
+      background: #fff7ec;
+      border-color: #e0b98c;
+      color: #a3701f;
+    }
+    .time-btn.full-waitlist.selected {
+      background: #d98c2b;
+      border-color: #d98c2b;
+      color: #fff;
+    }
+    #timeHint {
+      font-size: 12px;
+      color: #888;
+      margin-top: 6px;
+    }
+    #waitlistNote {
+      align-items: center;
+      font-size: 12px;
+      color: #a3701f;
+      background: #fff7ec;
+      border: 1px solid #e0b98c;
+      border-radius: 8px;
+      padding: 8px 10px;
+      margin-top: 10px;
+      display: none;
+    }
+
+    /* ---- 確認内容カード(ステップ3) ---- */
+    .summaryCard {
+      background: var(--accent-soft);
+      border: 1px solid #f0d99a;
+      border-radius: 12px;
+      padding: 12px 14px;
+      margin-bottom: 18px;
+    }
+    .summaryRow {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+      padding: 3px 0;
+      color: #7a5c1e;
+    }
+    .summaryRow span { display: inline-flex; align-items: center; gap: 4px; }
+    .summaryRow b { color: var(--main-dark); }
+    .summaryNote { display: flex; align-items: center; gap: 4px; font-size: 12px; color: #a3701f; margin-top: 4px; }
+
+    .navRow { display: flex; gap: 10px; margin-top: 22px; }
+    .navRow .backBtn {
+      flex: 0 0 auto;
+      padding: 13px 18px;
+      border: none;
+      border-radius: 8px;
+      background: #eee;
+      color: #555;
+      font-size: 14px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    button.nextBtn, .navRow button#submitBtn {
+      flex: 1;
+      width: 100%;
+      margin-top: 0;
+      padding: 13px;
+      border: none;
+      border-radius: 8px;
+      background: var(--main);
+      color: #fff;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    button.nextBtn { margin-top: 22px; }
+    button#submitBtn:disabled { background: #aaa; cursor: not-allowed; }
+
+    #msg {
+      margin-top: 16px;
+      font-size: 14px;
+      text-align: center;
+      white-space: pre-wrap;
+    }
+    #msg.error { color: var(--danger); }
+    #msg.success { color: var(--main-dark); font-weight: bold; }
+
+    .done-box {
+      text-align: center;
+      padding: 20px 0;
+      position: relative;
+      overflow: hidden;
+      border-radius: 12px;
+    }
+    .done-box .big { display: flex; justify-content: center; animation: pop .5s ease; }
+    @keyframes pop {
+      0% { transform: scale(0.3); opacity: 0; }
+      60% { transform: scale(1.15); opacity: 1; }
+      100% { transform: scale(1); }
+    }
+    .confetti-piece {
+      position: absolute;
+      top: -12px;
+      width: 8px;
+      height: 14px;
+      opacity: 0.9;
+      animation-name: confettiFall;
+      animation-timing-function: ease-in;
+      animation-fill-mode: forwards;
+      border-radius: 2px;
+    }
+    @keyframes confettiFall {
+      0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+      100% { transform: translateY(260px) rotate(540deg); opacity: 0; }
+    }
+    button#lineCloseBtn {
+      display: none;
+      margin-top: 16px;
+      padding: 12px 20px;
+      border: none;
+      border-radius: 8px;
+      background: #06c755;
+      color: #fff;
+      font-size: 14px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+  </style>
+  <? if (CONFIG.LIFF_ID) { ?>
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <? } ?>
+</head>
+<body>
+  <div class="card">
+    <div class="hero">
+      <div class="heroEmoji" data-icon="party" data-icon-size="40"></div>
+      <h1 id="pageTitle">飲食店 ご予約フォーム</h1>
+      <div class="subtitle">わくわくのひとときを、いっしょに予約しましょう♪</div>
+    </div>
+
+    <div class="steps">
+      <div class="stepDot active" data-step="1"><div class="circle">1</div><div class="label"><span class="labelIcon" data-icon="forkPlate" data-icon-size="12"></span>コース</div></div>
+      <div class="stepLine"></div>
+      <div class="stepDot" data-step="2"><div class="circle">2</div><div class="label"><span class="labelIcon" data-icon="calendar" data-icon-size="12"></span>日時</div></div>
+      <div class="stepLine"></div>
+      <div class="stepDot" data-step="3"><div class="circle">3</div><div class="label"><span class="labelIcon" data-icon="notepad" data-icon-size="12"></span>情報</div></div>
+    </div>
+
+    <form id="bookingForm">
+      <div class="stepPanel" id="step1">
+        <label>コースをえらんでください<span class="req">必須</span></label>
+        <div id="courseCards" class="courseCards"></div>
+        <input type="hidden" id="course">
+
+        <label>人数<span class="req">必須</span></label>
+        <div class="partyStepper">
+          <button type="button" class="stepperBtn" id="partyMinus">－</button>
+          <input type="text" id="partySize" value="2" readonly inputmode="numeric">
+          <span class="partyUnit">名</span>
+          <button type="button" class="stepperBtn" id="partyPlus">＋</button>
+        </div>
+
+        <button type="button" class="nextBtn" id="toStep2">つぎへ すすむ ›</button>
+      </div>
+
+      <div class="stepPanel" id="step2" style="display:none;">
+        <label>予約日<span class="req">必須</span></label>
+        <input type="date" id="date">
+
+        <label>予約時間<span class="req">必須</span></label>
+        <div id="timeGrid"></div>
+        <div id="timeHint">先に予約日を選択してください</div>
+        <div id="waitlistNote"><span class="inlineIcon" data-icon="hourglass" data-icon-size="14"></span>選択した時間帯は満席です。キャンセル待ちとして登録し、空きが出た場合のみご連絡いたします。</div>
+        <input type="hidden" id="time">
+
+        <div class="navRow">
+          <button type="button" class="backBtn" id="toStep1Back">‹ もどる</button>
+          <button type="button" class="nextBtn" id="toStep3" style="margin-top:0;">つぎへ すすむ ›</button>
+        </div>
+      </div>
+
+      <div class="stepPanel" id="step3" style="display:none;">
+        <div class="summaryCard" id="summaryCard"></div>
+
+        <label>お名前<span class="req">必須</span></label>
+        <input type="text" id="name" required>
+
+        <label>フリガナ<span class="req">必須</span></label>
+        <input type="text" id="kana" required>
+
+        <div class="row2">
+          <div>
+            <label>電話番号<span class="req">必須</span></label>
+            <input type="tel" id="phone" placeholder="090-1234-5678" required>
+          </div>
+          <div>
+            <label>メールアドレス<span class="req">必須</span></label>
+            <input type="email" id="email" required>
+          </div>
+        </div>
+
+        <label>ご要望</label>
+        <textarea id="notes" placeholder="アレルギーや苦手な食材、お祝い等のご要望があればご記入ください"></textarea>
+
+        <div class="navRow">
+          <button type="button" class="backBtn" id="toStep2Back">‹ もどる</button>
+          <button type="submit" id="submitBtn"><span class="btnIcon" data-icon="party" data-icon-size="18"></span><span id="submitBtnLabel">この内容で予約する</span></button>
+        </div>
+        <div id="msg"></div>
+      </div>
+    </form>
+
+    <div class="done-box" id="doneBox" style="display:none;">
+      <div class="big" id="doneIcon"></div>
+      <div id="doneMsg" style="margin-top:8px; font-weight:bold;"></div>
+      <button id="lineCloseBtn" type="button">LINEのトーク画面に戻る</button>
+    </div>
+  </div>
+
+  <script>
+    var CFG = null;
+    var selectedTime = null;
+    var selectedIsWaitlist = false;
+    var CURRENT_STEP = 1;
+    var LIFF_ID = <?!= JSON.stringify(CONFIG.LIFF_ID || '') ?>;
+    var lineProfile = null; // LIFF経由で取得できた場合のみ { userId, displayName }
+
+    // ---- アイコン(絵文字の代わりに使うオリジナルSVG。すべて共通の暖色パレットで統一) ----
+    var ICONS = {
+      party: '<path d="M6 42 L28 12 L36 20 Z" fill="#b5502f"/>' +
+        '<path d="M6 42 L20 34 L28 12" fill="none" stroke="#7c3a22" stroke-width="2" stroke-linejoin="round"/>' +
+        '<rect x="2" y="40" width="8" height="5" rx="1.5" fill="#7c3a22" transform="rotate(-38 6 42)"/>' +
+        '<circle cx="34" cy="8" r="2.6" fill="#ffb703"/>' +
+        '<circle cx="42" cy="15" r="2.2" fill="#ff8fa3"/>' +
+        '<circle cx="40" cy="24" r="2" fill="#4ecdc4"/>' +
+        '<circle cx="30" cy="6" r="1.8" fill="#6c8ff5"/>' +
+        '<circle cx="44" cy="6" r="1.6" fill="#7bc86c"/>',
+      calendar: '<rect x="6" y="10" width="36" height="32" rx="5" fill="#fff" stroke="#b5502f" stroke-width="3"/>' +
+        '<rect x="6" y="10" width="36" height="10" rx="5" fill="#b5502f"/>' +
+        '<rect x="14" y="4" width="4" height="10" rx="2" fill="#7c3a22"/>' +
+        '<rect x="30" y="4" width="4" height="10" rx="2" fill="#7c3a22"/>' +
+        '<circle cx="16" cy="30" r="2.4" fill="#ffb703"/><circle cx="24" cy="30" r="2.4" fill="#ffb703"/>' +
+        '<circle cx="32" cy="30" r="2.4" fill="#e3d9d0"/><circle cx="16" cy="37" r="2.4" fill="#e3d9d0"/>',
+      notepad: '<rect x="9" y="6" width="30" height="36" rx="4" fill="#fff" stroke="#b5502f" stroke-width="3"/>' +
+        '<line x1="15" y1="16" x2="33" y2="16" stroke="#e3d9d0" stroke-width="3" stroke-linecap="round"/>' +
+        '<line x1="15" y1="24" x2="33" y2="24" stroke="#e3d9d0" stroke-width="3" stroke-linecap="round"/>' +
+        '<line x1="15" y1="32" x2="27" y2="32" stroke="#e3d9d0" stroke-width="3" stroke-linecap="round"/>' +
+        '<rect x="26" y="29" width="14" height="6" rx="2" fill="#ffb703" transform="rotate(-40 26 29)"/>',
+      forkPlate: '<circle cx="26" cy="24" r="16" fill="#fff3ec" stroke="#e3d9d0" stroke-width="2"/>' +
+        '<g stroke="#7c3a22" stroke-width="2.5" stroke-linecap="round" fill="none">' +
+        '<line x1="6" y1="4" x2="6" y2="16"/><line x1="10" y1="4" x2="10" y2="16"/><line x1="14" y1="4" x2="14" y2="16"/>' +
+        '<path d="M6 16 Q6 21 10 21 Q14 21 14 16"/><line x1="10" y1="21" x2="10" y2="44"/></g>' +
+        '<path d="M40 4 Q44 11 40 21 L38 21 L38 4 Z" fill="#7c3a22"/>' +
+        '<line x1="39" y1="21" x2="39" y2="44" stroke="#7c3a22" stroke-width="2.5" stroke-linecap="round"/>',
+      people: '<circle cx="17" cy="16" r="7" fill="#b5502f"/><path d="M5 40 Q5 26 17 26 Q29 26 29 40 Z" fill="#b5502f"/>' +
+        '<circle cx="33" cy="18" r="6" fill="#ffb703"/><path d="M23 40 Q23 28 33 28 Q43 28 43 40 Z" fill="#ffb703"/>',
+      hourglass: '<line x1="10" y1="6" x2="38" y2="6" stroke="#a3701f" stroke-width="3" stroke-linecap="round"/>' +
+        '<line x1="10" y1="42" x2="38" y2="42" stroke="#a3701f" stroke-width="3" stroke-linecap="round"/>' +
+        '<path d="M12 6 H36 L26 24 L36 42 H12 L22 24 Z" fill="none" stroke="#a3701f" stroke-width="3" stroke-linejoin="round"/>' +
+        '<path d="M16 10 H32 L24 22 Z" fill="#ffb703"/><path d="M18 38 H30 L24 27 Z" fill="#e0b98c"/>',
+      // ---- コースカード用(順番に繰り返し使う) ----
+      dish0: '<circle cx="24" cy="26" r="16" fill="#fff" stroke="#e3d9d0" stroke-width="2"/>' +
+        '<ellipse cx="24" cy="24" rx="10" ry="7" fill="#c8703f"/><ellipse cx="20" cy="21" rx="3" ry="2" fill="#e3925c"/>',
+      dish1: '<path d="M16 6 H32 L29 20 Q24 26 19 20 Z" fill="#7a2e3a"/>' +
+        '<line x1="24" y1="24" x2="24" y2="38" stroke="#7c3a22" stroke-width="2.5"/>' +
+        '<line x1="16" y1="42" x2="32" y2="42" stroke="#7c3a22" stroke-width="2.5" stroke-linecap="round"/>',
+      dish2: '<path d="M8 22 H40 Q40 38 24 38 Q8 38 8 22 Z" fill="#fff" stroke="#b5502f" stroke-width="2.5"/>' +
+        '<path d="M12 22 Q24 30 36 22" fill="none" stroke="#e3925c" stroke-width="2.5"/>' +
+        '<circle cx="18" cy="18" r="2" fill="#4a7c3f"/><circle cx="28" cy="16" r="2" fill="#4a7c3f"/>',
+      dish3: '<path d="M8 38 L24 12 L40 38 Z" fill="#f7c9d8"/>' +
+        '<path d="M8 38 L24 12 L40 38 Z" fill="none" stroke="#b5502f" stroke-width="2"/>' +
+        '<rect x="8" y="35" width="32" height="4" fill="#b5502f"/><circle cx="24" cy="14" r="2.5" fill="#c0392b"/>',
+      dish4: '<rect x="10" y="20" width="28" height="14" rx="5" fill="#fff" stroke="#555" stroke-width="2"/>' +
+        '<rect x="10" y="27" width="28" height="4" fill="#2e7d32"/><ellipse cx="24" cy="18" rx="12" ry="6" fill="#e26b6b"/>',
+      dish5: '<path d="M10 8 H20 L17 20 Q15 24 12 20 Z" fill="#ffe08a"/>' +
+        '<line x1="15" y1="22" x2="15" y2="36" stroke="#7c3a22" stroke-width="2"/>' +
+        '<line x1="10" y1="38" x2="20" y2="38" stroke="#7c3a22" stroke-width="2" stroke-linecap="round"/>' +
+        '<path d="M28 4 H38 L35 18 Q33 22 30 18 Z" fill="#ffe08a"/>' +
+        '<line x1="33" y1="20" x2="33" y2="36" stroke="#7c3a22" stroke-width="2"/>' +
+        '<line x1="28" y1="38" x2="38" y2="38" stroke="#7c3a22" stroke-width="2" stroke-linecap="round"/>',
+      dish6: '<rect x="6" y="14" width="36" height="26" rx="4" fill="#fff" stroke="#7c3a22" stroke-width="2.5"/>' +
+        '<line x1="24" y1="14" x2="24" y2="40" stroke="#7c3a22" stroke-width="2"/>' +
+        '<line x1="6" y1="27" x2="24" y2="27" stroke="#7c3a22" stroke-width="2"/>' +
+        '<circle cx="15" cy="20" r="3" fill="#c0392b"/><rect x="12" y="31" width="8" height="5" rx="1.5" fill="#4a7c3f"/>' +
+        '<ellipse cx="33" cy="27" rx="7" ry="9" fill="#f0d9a8"/>',
+      dish7: '<path d="M24 6 L44 40 H4 Z" fill="#f2b84b"/>' +
+        '<path d="M24 6 L44 40 H4 Z" fill="none" stroke="#b5502f" stroke-width="2"/>' +
+        '<circle cx="22" cy="24" r="2.4" fill="#c0392b"/><circle cx="28" cy="30" r="2.4" fill="#c0392b"/><circle cx="18" cy="32" r="2.4" fill="#c0392b"/>',
+      dish8: '<ellipse cx="24" cy="24" rx="16" ry="4" fill="#adb5bd"/>' +
+        '<path d="M8 24 H40 L37 38 H11 Z" fill="#8d99ae"/>' +
+        '<path d="M2 22 Q8 14 14 22" fill="none" stroke="#7c3a22" stroke-width="2.5" stroke-linecap="round"/>' +
+        '<path d="M34 22 Q40 14 46 22" fill="none" stroke="#7c3a22" stroke-width="2.5" stroke-linecap="round"/>' +
+        '<path d="M20 12 Q22 6 20 2" stroke="#ccc" stroke-width="2" fill="none" stroke-linecap="round"/>' +
+        '<path d="M28 12 Q30 6 28 2" stroke="#ccc" stroke-width="2" fill="none" stroke-linecap="round"/>',
+      dish9: '<path d="M12 14 H36 L32 42 H16 Z" fill="#d7f0ec"/>' +
+        '<path d="M12 14 H36 L32 42 H16 Z" fill="none" stroke="#4ecdc4" stroke-width="2.5"/>' +
+        '<line x1="26" y1="4" x2="30" y2="14" stroke="#4ecdc4" stroke-width="3" stroke-linecap="round"/>',
+    };
+    var COURSE_ICON_KEYS = ['dish0', 'dish1', 'dish2', 'dish3', 'dish4', 'dish5', 'dish6', 'dish7', 'dish8', 'dish9'];
+
+    function iconHtml(key, size) {
+      size = size || 24;
+      return '<svg class="icon" viewBox="0 0 48 48" width="' + size + '" height="' + size + '" aria-hidden="true">' + (ICONS[key] || '') + '</svg>';
+    }
+
+    /**
+     * HTML内に静的に置いた data-icon="キー" 要素に、対応するSVGアイコンを流し込む。
+     * (絵文字の代わりに使うアイコンをまとめて1箇所で管理するため)
+     */
+    function hydrateStaticIcons() {
+      document.querySelectorAll('[data-icon]').forEach(function (el) {
+        var size = parseInt(el.dataset.iconSize, 10) || 20;
+        el.innerHTML = iconHtml(el.dataset.icon, size);
+      });
+    }
+
+    function pad(n) { return n < 10 ? '0' + n : '' + n; }
+    function toDateStr(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+    function escapeHtml(v) {
+      return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function init() {
+      hydrateStaticIcons();
+      google.script.run.withSuccessHandler(onConfig).getConfig();
+      initLiffIfNeeded();
+
+      var dateInput = document.getElementById('date');
+      var today = new Date();
+      dateInput.min = toDateStr(today);
+
+      dateInput.addEventListener('change', refreshTimeGrid);
+      document.getElementById('partyMinus').addEventListener('click', function () { changeParty(-1); });
+      document.getElementById('partyPlus').addEventListener('click', function () { changeParty(1); });
+      document.getElementById('toStep2').addEventListener('click', onToStep2);
+      document.getElementById('toStep1Back').addEventListener('click', function () { goToStep(1); });
+      document.getElementById('toStep3').addEventListener('click', onToStep3);
+      document.getElementById('toStep2Back').addEventListener('click', function () { goToStep(2); });
+      document.getElementById('bookingForm').addEventListener('submit', onSubmit);
+      document.getElementById('lineCloseBtn').addEventListener('click', function () {
+        try { liff.closeWindow(); } catch (e) { /* LINEアプリ外なら何もしない */ }
+      });
+    }
+
+    /**
+     * LINEアプリ内(LIFF)で開かれた場合、LINEのプロフィール(表示名)を取得して
+     * お名前欄の自動入力とサーバへの送信内容に使う。LIFF未設定の店舗や、
+     * 通常のブラウザで開いた場合は何もしない(既存の動作に影響しない)。
+     */
+    function initLiffIfNeeded() {
+      if (!LIFF_ID || typeof liff === 'undefined') return;
+      liff.init({ liffId: LIFF_ID }).then(function () {
+        if (!liff.isLoggedIn()) return;
+        return liff.getProfile().then(function (profile) {
+          lineProfile = profile;
+          var nameInput = document.getElementById('name');
+          if (nameInput && !nameInput.value && profile.displayName) {
+            nameInput.value = profile.displayName;
+          }
+        });
+      }).catch(function (err) {
+        console.log('LIFF初期化エラー(通常の予約フォームとして続行します): ' + err);
+      });
+    }
+
+    function onConfig(cfg) {
+      CFG = cfg;
+      if (cfg.storeName) {
+        var title = cfg.storeName + ' ご予約フォーム';
+        document.title = title;
+        document.getElementById('pageTitle').textContent = title;
+      }
+      var maxDate = new Date();
+      maxDate.setDate(maxDate.getDate() + cfg.maxDaysAhead);
+      document.getElementById('date').max = toDateStr(maxDate);
+
+      renderCourseCards(cfg.courses);
+    }
+
+    function renderCourseCards(courses) {
+      var wrap = document.getElementById('courseCards');
+      wrap.innerHTML = '';
+      (courses || []).forEach(function (c, i) {
+        var card = document.createElement('div');
+        card.className = 'courseCard';
+        card.dataset.name = c.name;
+
+        var emoji = document.createElement('div');
+        emoji.className = 'emoji';
+        emoji.innerHTML = iconHtml(COURSE_ICON_KEYS[i % COURSE_ICON_KEYS.length], 32);
+
+        var name = document.createElement('div');
+        name.className = 'name';
+        name.textContent = c.name;
+
+        var duration = document.createElement('div');
+        duration.className = 'duration';
+        duration.textContent = '約' + c.duration + '分';
+
+        card.appendChild(emoji);
+        card.appendChild(name);
+        card.appendChild(duration);
+        card.addEventListener('click', function () { selectCourse(c.name); });
+        wrap.appendChild(card);
+      });
+      if (courses && courses.length) selectCourse(courses[0].name);
+    }
+
+    function selectCourse(name) {
+      document.getElementById('course').value = name;
+      document.querySelectorAll('#courseCards .courseCard').forEach(function (el) {
+        el.classList.toggle('selected', el.dataset.name === name);
+      });
+      refreshTimeGrid();
+    }
+
+    function changeParty(delta) {
+      var input = document.getElementById('partySize');
+      var max = (CFG && CFG.partySizeMax) || 8;
+      var v = (parseInt(input.value, 10) || 1) + delta;
+      v = Math.min(max, Math.max(1, v));
+      input.value = v;
+      refreshTimeGrid();
+    }
+
+    // ---- ステップ切り替え ----
+    function goToStep(n) {
+      CURRENT_STEP = n;
+      [1, 2, 3].forEach(function (i) {
+        document.getElementById('step' + i).style.display = (i === n) ? 'block' : 'none';
+      });
+      document.querySelectorAll('.stepDot').forEach(function (dot) {
+        var s = parseInt(dot.dataset.step, 10);
+        dot.classList.toggle('active', s === n);
+        dot.classList.toggle('done', s < n);
+      });
+      document.querySelectorAll('.stepLine').forEach(function (line, idx) {
+        line.classList.toggle('done', (idx + 1) < n);
+      });
+      document.querySelector('.card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function onToStep2() {
+      var partySize = parseInt(document.getElementById('partySize').value, 10);
+      if (!document.getElementById('course').value) {
+        alert('コースを選んでください。');
+        return;
+      }
+      if (!partySize || partySize < 1) {
+        alert('人数を選んでください。');
+        return;
+      }
+      goToStep(2);
+    }
+
+    function onToStep3() {
+      if (!document.getElementById('date').value || !document.getElementById('time').value) {
+        alert('予約日と予約時間を選んでください。');
+        return;
+      }
+      renderSummary();
+      goToStep(3);
+    }
+
+    function renderSummary() {
+      var courseName = document.getElementById('course').value;
+      var partySize = document.getElementById('partySize').value;
+      var dateStr = document.getElementById('date').value;
+      var timeStr = document.getElementById('time').value;
+      document.getElementById('summaryCard').innerHTML =
+        '<div class="summaryRow"><span>' + iconHtml('calendar', 16) + ' 日時</span><b>' + escapeHtml(dateStr) + ' ' + escapeHtml(timeStr) + '</b></div>' +
+        '<div class="summaryRow"><span>' + iconHtml('forkPlate', 16) + ' コース</span><b>' + escapeHtml(courseName) + '</b></div>' +
+        '<div class="summaryRow"><span>' + iconHtml('people', 16) + ' 人数</span><b>' + escapeHtml(partySize) + '名</b></div>' +
+        (selectedIsWaitlist ? '<div class="summaryNote">' + iconHtml('hourglass', 14) + ' 満席のため、キャンセル待ちとして登録されます</div>' : '');
+    }
+
+    function refreshTimeGrid() {
+      var grid = document.getElementById('timeGrid');
+      var hint = document.getElementById('timeHint');
+      grid.innerHTML = '';
+      selectedTime = null;
+      selectedIsWaitlist = false;
+      document.getElementById('time').value = '';
+      updateSubmitUi();
+
+      var dateStr = document.getElementById('date').value;
+      var courseName = document.getElementById('course').value;
+      var partySize = parseInt(document.getElementById('partySize').value, 10);
+
+      if (!CFG || !dateStr || !courseName || !partySize) {
+        hint.textContent = '先に予約日を選択してください';
+        return;
+      }
+      if (partySize > CFG.partySizeMax) {
+        hint.textContent = 'ご予約は最大' + CFG.partySizeMax + '名までです。お電話にてご相談ください。';
+        return;
+      }
+      hint.textContent = '読み込み中...';
+
+      google.script.run
+        .withSuccessHandler(function (schedule) { renderTimeGrid(schedule, dateStr, courseName, partySize); })
+        .withFailureHandler(function (err) { hint.textContent = '空き状況の取得に失敗しました: ' + err.message; })
+        .getDaySchedule(dateStr);
+    }
+
+    function renderTimeGrid(schedule, dateStr, courseName, partySize) {
+      var grid = document.getElementById('timeGrid');
+      var hint = document.getElementById('timeHint');
+      grid.innerHTML = '';
+
+      if (schedule.closed) {
+        hint.textContent = 'この日は定休日です。別の日をお選びください。';
+        return;
+      }
+
+      var courseDef = CFG.courses.filter(function (c) { return c.name === courseName; })[0];
+      var duration = courseDef ? courseDef.duration : CFG.slotMinutes;
+
+      var startMin = CFG.businessStartHour * 60;
+      var endMin = CFG.businessEndHour * 60;
+      var slot = CFG.slotMinutes;
+
+      var now = new Date();
+      var isToday = (dateStr === toDateStr(now));
+      var nowMin = now.getHours() * 60 + now.getMinutes();
+
+      var any = false;
+      for (var t = startMin; t + duration <= endMin; t += slot) {
+        var label = pad(Math.floor(t / 60)) + ':' + pad(t % 60);
+
+        var reservedAtSlot = schedule.bookedRanges.reduce(function (sum, r) {
+          var overlaps = t < r.endMin && (t + duration) > r.startMin;
+          return overlaps ? sum + r.partySize : sum;
+        }, 0);
+        var remaining = CFG.seatsTotal - reservedAtSlot;
+        var isFull = remaining < partySize;
+        var isPast = isToday && t <= nowMin;
+        var isWaitlistable = isFull && !isPast && CFG.waitlistEnabled;
+        var isSelectable = !isPast && (!isFull || isWaitlistable);
+
+        var btn = document.createElement('div');
+        btn.className = 'time-btn' + (!isSelectable ? ' disabled' : (isWaitlistable ? ' full-waitlist' : ''));
+        btn.textContent = label + (isWaitlistable ? '(待)' : '');
+        btn.dataset.time = label;
+        if (isSelectable) {
+          btn.title = isFull ? '満席・キャンセル待ちで登録できます' : '残り約' + remaining + '席';
+          any = true;
+          btn.addEventListener('click', function () {
+            var els = grid.querySelectorAll('.time-btn');
+            els.forEach(function (e) { e.classList.remove('selected'); });
+            this.classList.add('selected');
+            selectedTime = this.dataset.time;
+            selectedIsWaitlist = this.classList.contains('full-waitlist');
+            document.getElementById('time').value = selectedTime;
+            updateSubmitUi();
+          });
+        }
+        grid.appendChild(btn);
+      }
+      hint.textContent = any ? '空き時間をタップして選択してください((待)は満席のためキャンセル待ちになります)' : 'この日・この人数では空きがありません。別の日時をお選びください。';
+    }
+
+    function updateSubmitUi() {
+      var note = document.getElementById('waitlistNote');
+      note.style.display = selectedIsWaitlist ? 'flex' : 'none';
+      setSubmitButtonState(selectedIsWaitlist);
+    }
+
+    /**
+     * 送信ボタンのアイコンと文言を、通常予約/キャンセル待ちの状態に合わせて切り替える。
+     */
+    function setSubmitButtonState(isWaitlist) {
+      document.querySelector('#submitBtn .btnIcon').innerHTML = iconHtml(isWaitlist ? 'hourglass' : 'party', 18);
+      document.getElementById('submitBtnLabel').textContent = isWaitlist ? 'キャンセル待ちに登録する' : 'この内容で予約する';
+    }
+
+    function onSubmit(e) {
+      e.preventDefault();
+      var msg = document.getElementById('msg');
+      msg.className = '';
+      msg.textContent = '';
+
+      var form = {
+        name: document.getElementById('name').value.trim(),
+        kana: document.getElementById('kana').value.trim(),
+        phone: document.getElementById('phone').value.trim(),
+        email: document.getElementById('email').value.trim(),
+        course: document.getElementById('course').value,
+        partySize: document.getElementById('partySize').value,
+        date: document.getElementById('date').value,
+        time: document.getElementById('time').value,
+        notes: document.getElementById('notes').value.trim(),
+        acceptWaitlist: selectedIsWaitlist,
+        lineUserId: lineProfile ? lineProfile.userId : '',
+        lineDisplayName: lineProfile ? lineProfile.displayName : '',
+      };
+
+      if (!form.name || !form.kana || !form.phone || !form.email || !form.date || !form.time || !form.course || !form.partySize) {
+        msg.className = 'error';
+        msg.textContent = '必須項目を入力し、予約時間を選択してください。';
+        return;
+      }
+
+      var btn = document.getElementById('submitBtn');
+      var labelEl = document.getElementById('submitBtnLabel');
+      var submitLabel = labelEl.textContent;
+      btn.disabled = true;
+      labelEl.textContent = '送信中...';
+
+      google.script.run
+        .withSuccessHandler(function (res) {
+          btn.disabled = false;
+          labelEl.textContent = submitLabel;
+          if (res.success) {
+            document.getElementById('bookingForm').style.display = 'none';
+            document.querySelector('.steps').style.display = 'none';
+            document.getElementById('doneBox').style.display = 'block';
+            document.getElementById('doneIcon').innerHTML = iconHtml(res.waitlisted ? 'hourglass' : 'party', 64);
+            document.getElementById('doneMsg').textContent = res.message;
+            fireConfetti();
+            notifyLiffOfSuccess(res.message);
+          } else {
+            msg.className = 'error';
+            msg.textContent = res.message;
+            refreshTimeGrid();
+          }
+        })
+        .withFailureHandler(function (err) {
+          btn.disabled = false;
+          labelEl.textContent = submitLabel;
+          msg.className = 'error';
+          msg.textContent = '送信エラー: ' + err.message;
+        })
+        .submitBooking(form);
+    }
+
+    /**
+     * 予約完了時、カードの中に紙吹雪を降らせる小さな演出。数秒後に自動で消える。
+     */
+    function fireConfetti() {
+      var box = document.getElementById('doneBox');
+      var colors = ['#ffb703', '#ff8fa3', '#4ecdc4', '#b5502f', '#7bc86c', '#6c8ff5'];
+      for (var i = 0; i < 28; i++) {
+        var piece = document.createElement('div');
+        piece.className = 'confetti-piece';
+        piece.style.left = (Math.random() * 100) + '%';
+        piece.style.background = colors[i % colors.length];
+        piece.style.animationDuration = (1.2 + Math.random() * 1.2) + 's';
+        piece.style.animationDelay = (Math.random() * 0.4) + 's';
+        box.appendChild(piece);
+        (function (p) { setTimeout(function () { p.remove(); }, 3000); })(piece);
+      }
+    }
+
+    /**
+     * LINEアプリ内で開かれている場合、予約結果のメッセージをトーク画面に送り、
+     * トーク画面へ戻るボタンを表示する。送信に失敗しても予約自体は成立しているので無視する。
+     * (LIFFアプリに「チャットメッセージ」の権限を追加していない場合は送信できないが、その場合も
+     * ボタンでトーク画面に戻ることはできる)
+     */
+    function notifyLiffOfSuccess(message) {
+      if (typeof liff === 'undefined' || !liff.isInClient || !liff.isInClient()) return;
+      document.getElementById('lineCloseBtn').style.display = 'inline-block';
+      try {
+        liff.sendMessages([{ type: 'text', text: message }]).catch(function (err) {
+          console.log('LINEへのメッセージ送信エラー: ' + err);
+        });
+      } catch (e) {
+        console.log('LINEへのメッセージ送信エラー: ' + e);
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>
