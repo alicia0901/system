@@ -343,7 +343,7 @@ function submitBooking(form) {
 
     return {
       success: true,
-      message: form.date + ' ' + form.time + ' から ' + partySize + '名様「' + form.course + '」でご予約を受け付けました。',
+      message: form.date + ' ' + form.time + ' から ' + partySize + '名様「' + form.course + '」でのご予約が完了しました!当日を楽しみにお待ちしております♪',
     };
   } catch (err) {
     return { success: false, message: 'エラーが発生しました: ' + err.message };
@@ -885,19 +885,29 @@ function sumOverlappingPartySize(ranges, startMin, endMin) {
 }
 
 function buildBookingEmailBody(form, partySize) {
-  return [
+  const lines = [
     (form.name || '') + ' 様',
     '',
-    '以下の内容でご予約を承りました。',
+    'このたびはご予約いただき、誠にありがとうございます!',
+    '当日をどうぞ楽しみにお待ちください♪',
     '',
-    '予約日時: ' + form.date + ' ' + form.time,
+    '━━━━━━━━━━━━━━━',
+    'ご予約内容',
+    '━━━━━━━━━━━━━━━',
+    '日時: ' + form.date + ' ' + form.time,
     '人数: ' + partySize + '名',
     'コース: ' + form.course,
-    form.notes ? 'ご要望: ' + form.notes : '',
+  ];
+  if (form.notes) lines.push('ご要望: ' + form.notes);
+  lines.push(
+    '━━━━━━━━━━━━━━━',
     '',
-    '当日のご来店を心よりお待ちしております。',
-    (CONFIG.STORE_NAME || ''),
-  ].filter(function (s) { return s !== ''; }).join('\n');
+    'スタッフ一同、心を込めてお迎えの準備をしてお待ちしております。',
+    '当日お会いできる日を、私たちもとても楽しみにしています!',
+    '',
+    (CONFIG.STORE_NAME || '')
+  );
+  return lines.join('\n');
 }
 
 function sendCustomerConfirmationEmail(form, partySize) {
@@ -962,15 +972,22 @@ function sendWaitlistPromotedEmail(form, partySize) {
     const body = [
       (form.name || '') + ' 様',
       '',
-      'キャンセルが出ましたので、キャンセル待ちいただいていたご予約が確定いたしました。',
+      'お待たせいたしました!キャンセルが出ましたので、キャンセル待ちいただいていたご予約が確定いたしました。',
+      '当日をどうぞ楽しみにお待ちください♪',
       '',
-      '予約日時: ' + form.date + ' ' + form.time,
+      '━━━━━━━━━━━━━━━',
+      'ご予約内容',
+      '━━━━━━━━━━━━━━━',
+      '日時: ' + form.date + ' ' + form.time,
       '人数: ' + partySize + '名',
       'コース: ' + form.course,
+      '━━━━━━━━━━━━━━━',
       '',
-      '当日のご来店を心よりお待ちしております。',
+      'スタッフ一同、心を込めてお迎えの準備をしてお待ちしております。',
+      '当日お会いできる日を、私たちもとても楽しみにしています!',
+      '',
       (CONFIG.STORE_NAME || ''),
-    ].filter(function (s) { return s !== ''; }).join('\n');
+    ].join('\n');
     MailApp.sendEmail(form.email, subject, body);
   } catch (err) {
     Logger.log('繰り上げ確定メール送信エラー: ' + err.message);
