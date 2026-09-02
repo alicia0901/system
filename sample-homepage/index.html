@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>サンプル食堂</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;600;800&family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  /* ============================================================
+     サンプル食堂 ホームページ
+     ※このファイルはサンプルです。店名・住所・電話番号・営業時間・
+       予約フォームのURL(RESERVATION_URL)を実際の内容に差し替えてください。
+     ============================================================ */
+
+  :root {
+    --ground: #f2ece1;
+    --surface: #ffffff;
+    --surface-2: #ece3d3;
+    --ink: #241d29;
+    --ink-soft: #4a3f4a;
+    --muted: #7d6f66;
+    --ember: #d1541f;
+    --ember-strong: #b8451a;
+    --gold: #a9822f;
+    --line: rgba(36, 29, 41, 0.14);
+    --shadow: rgba(36, 29, 41, 0.12);
+    --grain-opacity: 0.05;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #1b1620;
+      --surface: #241d29;
+      --surface-2: #2c2430;
+      --ink: #f3ece2;
+      --ink-soft: #d8cbc0;
+      --muted: #b8a9a1;
+      --ember: #e8622c;
+      --ember-strong: #f37a41;
+      --gold: #c9a24b;
+      --line: rgba(243, 236, 226, 0.14);
+      --shadow: rgba(0, 0, 0, 0.45);
+      --grain-opacity: 0.07;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #1b1620;
+    --surface: #241d29;
+    --surface-2: #2c2430;
+    --ink: #f3ece2;
+    --ink-soft: #d8cbc0;
+    --muted: #b8a9a1;
+    --ember: #e8622c;
+    --ember-strong: #f37a41;
+    --gold: #c9a24b;
+    --line: rgba(243, 236, 226, 0.14);
+    --shadow: rgba(0, 0, 0, 0.45);
+    --grain-opacity: 0.07;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
+  }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "Zen Kaku Gothic New", "Hiragino Kaku Gothic ProN", sans-serif;
+    line-height: 1.8;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3 { font-family: "Shippori Mincho", "Hiragino Mincho ProN", serif; text-wrap: balance; margin: 0; }
+
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.28em;
+    color: var(--gold);
+  }
+  .eyebrow::before, .eyebrow::after { content: ""; width: 20px; height: 1px; background: var(--gold); opacity: 0.7; }
+
+  a { color: inherit; }
+
+  /* ---- ヒーロー ---- */
+  .hero {
+    position: relative;
+    min-height: 100svh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 100px 24px 80px;
+    overflow: hidden;
+    background: var(--ground);
+  }
+  .hero::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 60% 50% at 50% 8%, color-mix(in srgb, var(--ember) 30%, transparent), transparent 70%),
+      radial-gradient(ellipse 45% 40% at 15% 85%, color-mix(in srgb, var(--gold) 18%, transparent), transparent 70%),
+      radial-gradient(ellipse 45% 40% at 88% 80%, color-mix(in srgb, var(--ember) 16%, transparent), transparent 70%);
+    pointer-events: none;
+  }
+  .hero::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    opacity: var(--grain-opacity);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    mix-blend-mode: overlay;
+    pointer-events: none;
+  }
+  .hero-inner { position: relative; max-width: 720px; }
+  .hero .eyebrow { justify-content: center; margin-bottom: 28px; opacity: 0; animation: rise 0.9s ease-out 0.1s forwards; }
+  .hero h1 {
+    font-size: clamp(48px, 9vw, 92px);
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    color: var(--ink);
+    opacity: 0;
+    animation: rise 1s ease-out 0.25s forwards;
+  }
+  .hero .tagline {
+    margin-top: 22px;
+    font-size: clamp(15px, 2vw, 18px);
+    color: var(--ink-soft);
+    letter-spacing: 0.06em;
+    opacity: 0;
+    animation: rise 1s ease-out 0.4s forwards;
+  }
+  .hero .cta-row { margin-top: 44px; opacity: 0; animation: rise 1s ease-out 0.55s forwards; }
+  .hero .hours-hint {
+    margin-top: 28px;
+    font-size: 13px;
+    color: var(--muted);
+    letter-spacing: 0.04em;
+    opacity: 0;
+    animation: rise 1s ease-out 0.7s forwards;
+  }
+
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 17px 38px;
+    border-radius: 999px;
+    background: var(--ember);
+    color: #fff8f2;
+    font-family: "Zen Kaku Gothic New", sans-serif;
+    font-weight: 700;
+    font-size: 16px;
+    letter-spacing: 0.06em;
+    text-decoration: none;
+    box-shadow: 0 10px 30px -8px color-mix(in srgb, var(--ember) 70%, transparent);
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+  }
+  .btn:hover { background: var(--ember-strong); transform: translateY(-2px); box-shadow: 0 14px 34px -8px color-mix(in srgb, var(--ember) 80%, transparent); }
+  .btn:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+  .btn .arrow { transition: transform 0.2s ease; }
+  .btn:hover .arrow { transform: translateX(4px); }
+
+  .btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 15px 30px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    color: var(--ink);
+    font-weight: 700;
+    font-size: 15px;
+    letter-spacing: 0.05em;
+    text-decoration: none;
+    transition: border-color 0.2s ease, background 0.2s ease;
+  }
+  .btn-ghost:hover { border-color: var(--gold); background: color-mix(in srgb, var(--gold) 10%, transparent); }
+
+  /* ---- 共通セクション ---- */
+  section { padding: 120px 24px; }
+  .wrap { max-width: 1040px; margin: 0 auto; }
+  .reveal { opacity: 0; transform: translateY(28px); transition: opacity 0.8s ease, transform 0.8s ease; }
+  .reveal.is-visible { opacity: 1; transform: translateY(0); }
+
+  .divider {
+    width: 44px;
+    height: 2px;
+    background: var(--gold);
+    margin: 26px auto 0;
+    border-radius: 2px;
+  }
+  .section-head { text-align: center; max-width: 620px; margin: 0 auto 64px; }
+  .section-head h2 { font-size: clamp(30px, 4vw, 42px); font-weight: 600; }
+  .section-head p { margin-top: 18px; color: var(--muted); font-size: 15px; }
+
+  /* ---- 想い ---- */
+  .story {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 40px;
+    text-align: center;
+  }
+  .story-lede {
+    font-family: "Shippori Mincho", serif;
+    font-size: clamp(22px, 3vw, 30px);
+    font-weight: 600;
+    color: var(--ink);
+    max-width: 640px;
+    margin: 0 auto;
+  }
+  .story p.body-text {
+    max-width: 60ch;
+    margin: 22px auto 0;
+    color: var(--ink-soft);
+    font-size: 15.5px;
+  }
+
+  /* ---- コース ---- */
+  .courses { background: var(--surface); }
+  .course-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 24px;
+  }
+  .course-card {
+    background: var(--ground);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 36px 28px;
+    text-align: left;
+    transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+  }
+  .course-card:hover { transform: translateY(-6px); box-shadow: 0 20px 40px -20px var(--shadow); border-color: var(--gold); }
+  .course-card .num {
+    font-family: "Shippori Mincho", serif;
+    font-size: 13px;
+    color: var(--gold);
+    letter-spacing: 0.2em;
+  }
+  .course-card h3 { margin-top: 14px; font-size: 22px; font-weight: 600; }
+  .course-card .duration { margin-top: 10px; color: var(--muted); font-size: 13.5px; letter-spacing: 0.04em; }
+  .course-card .desc { margin-top: 16px; color: var(--ink-soft); font-size: 14px; line-height: 1.9; }
+
+  /* ---- 営業案内 ---- */
+  .info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 48px;
+  }
+  .info-item .eyebrow { margin-bottom: 14px; }
+  .info-item dl { margin: 0; }
+  .info-item dt { font-size: 13px; color: var(--muted); margin-top: 14px; }
+  .info-item dt:first-child { margin-top: 0; }
+  .info-item dd { margin: 4px 0 0; font-size: 16px; font-weight: 500; }
+  .info-item dd.small { font-size: 14px; font-weight: 400; color: var(--ink-soft); }
+
+  /* ---- 予約CTA ---- */
+  .cta-section {
+    background: linear-gradient(180deg, var(--surface), var(--surface-2));
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .cta-section::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse 50% 60% at 50% 0%, color-mix(in srgb, var(--ember) 16%, transparent), transparent 70%);
+    pointer-events: none;
+  }
+  .cta-section .wrap { position: relative; }
+  .cta-section h2 { font-size: clamp(28px, 4vw, 40px); font-weight: 600; }
+  .cta-section p { margin-top: 16px; color: var(--muted); font-size: 15px; }
+  .cta-section .btn { margin-top: 36px; }
+
+  footer {
+    padding: 48px 24px 60px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    letter-spacing: 0.04em;
+  }
+  footer .mark { font-family: "Shippori Mincho", serif; font-size: 16px; color: var(--ink); margin-bottom: 10px; }
+
+  .note {
+    max-width: 1040px;
+    margin: 0 auto 40px;
+    padding: 16px 20px;
+    border: 1px dashed var(--line);
+    border-radius: 12px;
+    font-size: 12.5px;
+    color: var(--muted);
+    text-align: center;
+  }
+  .note code { color: var(--ember); }
+</style>
+</head>
+<body>
+
+<div class="note">
+  これはサンプルです。店名・キャッチコピー・住所・電話番号・営業時間と、下記の予約ボタンのリンク先(<code>RESERVATION_URL</code>)を、実際の内容に差し替えてご利用ください。
+</div>
+
+<section class="hero">
+  <div class="hero-inner">
+    <div class="eyebrow">SAMPLE RESTAURANT SITE</div>
+    <h1>サンプル食堂</h1>
+    <p class="tagline">旬の一皿と、寛ぐ時間を。</p>
+    <div class="cta-row">
+      <a class="btn reserve-link" href="#" target="_blank" rel="noopener">
+        ご予約はこちら <span class="arrow">→</span>
+      </a>
+    </div>
+    <p class="hours-hint">月曜定休 ・ 11:00–22:00</p>
+  </div>
+</section>
+
+<section class="story">
+  <div class="wrap reveal">
+    <div class="eyebrow" style="justify-content:center;">OUR STORY</div>
+    <p class="story-lede" style="margin-top:24px;">
+      毎朝仕入れる旬の食材を、飾らない一皿に。
+    </p>
+    <p class="body-text">
+      サンプル食堂は、昼は定食、夜はゆっくりお酒と肴を楽しめる小さな食堂です。
+      その日一番良い食材を、無理のない調理で。カウンター越しに話しながら、
+      気取らずに過ごせる時間をご用意しています。
+    </p>
+  </div>
+</section>
+
+<section class="courses">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="eyebrow" style="justify-content:center;">MENU</div>
+      <h2 style="margin-top:20px;">コースのご案内</h2>
+      <p>ご予約フォームからお選びいただけます。</p>
+    </div>
+    <div class="course-grid reveal">
+      <div class="course-card">
+        <div class="num">01</div>
+        <h3>ディナーコース</h3>
+        <div class="duration">目安 120分</div>
+        <p class="desc">季節の肴と、ゆっくりお楽しみいただく夜のコース。記念日やお祝い事にも。</p>
+      </div>
+      <div class="course-card">
+        <div class="num">02</div>
+        <h3>ランチ</h3>
+        <div class="duration">目安 60分</div>
+        <p class="desc">日替わりの定食を中心に、短めのお時間でお楽しみいただけます。</p>
+      </div>
+      <div class="course-card">
+        <div class="num">03</div>
+        <h3>お食事のみ</h3>
+        <div class="duration">目安 90分</div>
+        <p class="desc">コースのご注文なしで、お好きなお料理をゆっくりどうぞ。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="info">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="eyebrow" style="justify-content:center;">INFORMATION</div>
+      <h2 style="margin-top:20px;">営業のご案内</h2>
+    </div>
+    <div class="info-grid reveal">
+      <div class="info-item">
+        <div class="eyebrow">HOURS</div>
+        <dl>
+          <dt>営業時間</dt>
+          <dd>11:00 – 22:00(L.O. 21:30)</dd>
+          <dt>定休日</dt>
+          <dd>月曜日</dd>
+        </dl>
+      </div>
+      <div class="info-item">
+        <div class="eyebrow">ACCESS</div>
+        <dl>
+          <dt>住所</dt>
+          <dd class="small">〇〇県〇〇市〇〇 1-2-3</dd>
+          <dt>最寄駅</dt>
+          <dd class="small">〇〇駅 徒歩5分</dd>
+        </dl>
+      </div>
+      <div class="info-item">
+        <div class="eyebrow">CONTACT</div>
+        <dl>
+          <dt>電話番号</dt>
+          <dd>000-0000-0000</dd>
+          <dt>ご予約</dt>
+          <dd class="small">下のボタンからオンライン予約が可能です</dd>
+        </dl>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="cta-section">
+  <div class="wrap reveal">
+    <div class="eyebrow" style="justify-content:center;">RESERVATION</div>
+    <h2 style="margin-top:20px;">ご予約はオンラインで、24時間受付中。</h2>
+    <p>空席状況を確認しながら、その場でご予約いただけます。</p>
+    <a class="btn reserve-link" href="#" target="_blank" rel="noopener">
+      ご予約はこちら <span class="arrow">→</span>
+    </a>
+  </div>
+</section>
+
+<footer>
+  <div class="mark">サンプル食堂</div>
+  <div>&copy; 2026 Sample Shokudo. This is a sample page.</div>
+</footer>
+
+<script>
+  // 予約フォームのURL。デプロイ後、実際のWebアプリURL(.../exec)に差し替えてください。
+  var RESERVATION_URL = '#';
+  document.querySelectorAll('.reserve-link').forEach(function (el) {
+    el.setAttribute('href', RESERVATION_URL);
+    if (RESERVATION_URL === '#') {
+      el.addEventListener('click', function (e) {
+        e.preventDefault();
+        alert('予約フォームのURLをまだ設定していません。\nindex.html 内の RESERVATION_URL を、実際の予約フォームのURLに差し替えてください。');
+      });
+    }
+  });
+
+  // スクロールで各セクションをふわっと表示(reduce motion環境ではCSS側で無効化される)
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('is-visible');
+        io.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.15 });
+  document.querySelectorAll('.reveal').forEach(function (el) { io.observe(el); });
+</script>
+
+</body>
+</html>
