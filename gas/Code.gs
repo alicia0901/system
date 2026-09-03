@@ -76,19 +76,24 @@ const CONFIG = {
     MAX_SUBMISSIONS_PER_WINDOW: 20, // 下記ウィンドウ(秒)内で許可する送信数の上限
     WINDOW_SEC: 60,
   },
+
+  // 前日・当日リマインダーメールを送るか(要: 初回のみ Apps Script エディタで
+  // setupReminderTrigger を1回実行してトリガーを設定する。README.md 参照)
+  REMINDER_DAY_BEFORE_ENABLED: true,
+  REMINDER_SAME_DAY_ENABLED: true,
 };
 
 const SHEET_HEADERS = [
   '受付日時', '氏名', 'フリガナ', '電話番号', 'メールアドレス',
   '予約日', '予約時間', '人数', 'コース', 'ご要望', 'ステータス', 'カレンダーイベントID',
-  '申込経路', 'LINE表示名',
+  '申込経路', 'LINE表示名', 'リマインダー送信済み',
 ];
 
 // 列インデックス(0始まり)
 const COL = {
   RECEIVED_AT: 0, NAME: 1, KANA: 2, PHONE: 3, EMAIL: 4,
   DATE: 5, TIME: 6, PARTY_SIZE: 7, COURSE: 8, NOTES: 9, STATUS: 10, EVENT_ID: 11,
-  ROUTE: 12, LINE_NAME: 13,
+  ROUTE: 12, LINE_NAME: 13, REMINDER_SENT: 14,
 };
 
 // 申込経路の値
@@ -284,6 +289,7 @@ function submitBooking(form) {
           '', // カレンダー未登録(確定時に登録する)
           route,
           lineDisplayName,
+          '', // リマインダー未送信
         ]);
 
         markPhoneRateLimit(form.phone);
@@ -335,6 +341,7 @@ function submitBooking(form) {
       eventId,
       route,
       lineDisplayName,
+      '', // リマインダー未送信
     ]);
 
     // ---- 確認メール送信(失敗しても予約は成立させる) ----
@@ -503,6 +510,7 @@ function createReservationAdmin(token, form) {
       eventId,
       ROUTE_STAFF,
       '',
+      '', // リマインダー未送信
     ]);
 
     // 店舗スタッフ自身の登録のため、通知メールは送らずお客様への確認メールのみ送る
@@ -597,6 +605,11 @@ function updateReservationAdmin(token, rowIndex, form) {
       '(スタッフによる変更)',
     ].filter(String).join('\n');
 
+    // 日付・時間が変わった場合、以前の枠に対するリマインダー送信済みフラグは無効になるためリセットする
+    // (変わっていなければ、既に送信済みのリマインダーを二重送信しないよう維持する)
+    const dateTimeChanged = String(row[COL.DATE]) !== form.date || String(row[COL.TIME]) !== form.time;
+    const reminderSent = dateTimeChanged ? '' : (row[COL.REMINDER_SENT] || '');
+
     // 確定済み予約のみカレンダーと連動させる(キャンセル待ちはまだカレンダー未登録のため対象外)
     let eventId = row[COL.EVENT_ID];
     if (status === STATUS_CONFIRMED) {
@@ -631,6 +644,7 @@ function updateReservationAdmin(token, rowIndex, form) {
       eventId,
       row[COL.ROUTE] || ROUTE_WEB, // 申込経路・LINE表示名は変更内容に含まれないので元の値を維持する
       row[COL.LINE_NAME] || '',
+      reminderSent,
     ]]);
 
     return { success: true };
@@ -992,6 +1006,130 @@ function sendWaitlistPromotedEmail(form, partySize) {
   } catch (err) {
     Logger.log('繰り上げ確定メール送信エラー: ' + err.message);
   }
+}
+
+// ==================== リマインダーメール ====================
+//
+// 前日・当日に自動でリマインダーメールを送る機能。時間主導トリガーから
+// sendDayBeforeReminders() / sendSameDayReminders() が呼ばれる想定。
+// トリガー自体はコードのpushだけでは作成されないため、Apps Scriptエディタで
+// setupReminderTrigger() を1回だけ手動実行してセットアップする(README.md参照)。
+
+const REMINDER_KIND_DAY_BEFORE = 'day_before';
+const REMINDER_KIND_SAME_DAY = 'same_day';
+
+/**
+ * 前日リマインダー用。時間主導トリガー(毎日18時頃を想定)から呼び出す。
+ */
+function sendDayBeforeReminders() {
+  sendRemindersOfKind(REMINDER_KIND_DAY_BEFORE);
+}
+
+/**
+ * 当日リマインダー用。時間主導トリガー(毎日9時頃を想定)から呼び出す。
+ */
+function sendSameDayReminders() {
+  sendRemindersOfKind(REMINDER_KIND_SAME_DAY);
+}
+
+/**
+ * 指定した種類(前日/当日)の対象日に該当する「予約確定」の予約へ、
+ * まだ送っていなければリマインダーメールを送り、送信済みとしてシートに記録する。
+ * @param {string} kind REMINDER_KIND_DAY_BEFORE または REMINDER_KIND_SAME_DAY
+ */
+function sendRemindersOfKind(kind) {
+  const enabled = kind === REMINDER_KIND_DAY_BEFORE ? CONFIG.REMINDER_DAY_BEFORE_ENABLED : CONFIG.REMINDER_SAME_DAY_ENABLED;
+  if (!enabled) return;
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+
+  try {
+    const now = new Date();
+    const targetDateStr = kind === REMINDER_KIND_DAY_BEFORE
+      ? formatDateStr(new Date(now.getTime() + 24 * 60 * 60 * 1000))
+      : formatDateStr(now);
+
+    const sheet = getOrCreateSheet();
+    const values = sheet.getDataRange().getValues();
+
+    for (let r = 1; r < values.length; r++) {
+      const row = values[r];
+      if (row[COL.STATUS] !== STATUS_CONFIRMED) continue;
+      if (String(row[COL.DATE]) !== targetDateStr) continue;
+      if (!row[COL.EMAIL]) continue;
+
+      const sentFlags = String(row[COL.REMINDER_SENT] || '');
+      if (sentFlags.indexOf(kind) !== -1) continue; // 送信済み
+
+      const form = {
+        name: row[COL.NAME], date: String(row[COL.DATE]), time: row[COL.TIME],
+        course: row[COL.COURSE], email: row[COL.EMAIL],
+      };
+      const partySize = Number(row[COL.PARTY_SIZE]) || 0;
+
+      sendReminderEmail(form, partySize, kind);
+
+      const newFlags = (sentFlags ? sentFlags + ',' : '') + kind;
+      sheet.getRange(r + 1, COL.REMINDER_SENT + 1).setValue(newFlags);
+    }
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function sendReminderEmail(form, partySize, kind) {
+  if (!form.email) return;
+  try {
+    const isDayBefore = kind === REMINDER_KIND_DAY_BEFORE;
+    const subject = '[' + (CONFIG.STORE_NAME || 'ご予約') + '] ' + (isDayBefore ? '明日' : '本日') + 'のご予約のご案内 (' + form.date + ' ' + form.time + ')';
+    const intro = isDayBefore
+      ? 'いよいよ明日ですね!ご予約のリマインドをお送りします。'
+      : '本日はご予約いただき、ありがとうございます。';
+    const body = [
+      (form.name || '') + ' 様',
+      '',
+      intro,
+      '当日のお越しを心よりお待ちしております。',
+      '',
+      '━━━━━━━━━━━━━━━',
+      'ご予約内容',
+      '━━━━━━━━━━━━━━━',
+      '日時: ' + form.date + ' ' + form.time,
+      '人数: ' + partySize + '名',
+      'コース: ' + form.course,
+      '━━━━━━━━━━━━━━━',
+      '',
+      (CONFIG.STORE_NAME || ''),
+    ].join('\n');
+    MailApp.sendEmail(form.email, subject, body);
+  } catch (err) {
+    Logger.log('リマインダーメール送信エラー: ' + err.message);
+  }
+}
+
+/**
+ * リマインダーメールの自動送信を有効にするためのセットアップ関数。
+ * Apps Scriptエディタの関数選択で「setupReminderTrigger」を選び、
+ * 「実行」ボタンを1回だけ押してください(初回はカレンダー等の権限承認を求められます)。
+ * 既存の同名トリガーは一度削除してから作り直すため、再実行しても重複しません。
+ */
+function setupReminderTrigger() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    const fn = t.getHandlerFunction();
+    if (fn === 'sendDayBeforeReminders' || fn === 'sendSameDayReminders') {
+      ScriptApp.deleteTrigger(t);
+    }
+  });
+
+  ScriptApp.newTrigger('sendDayBeforeReminders').timeBased().everyDays(1).atHour(18).create();
+  ScriptApp.newTrigger('sendSameDayReminders').timeBased().everyDays(1).atHour(9).create();
+
+  Logger.log('リマインダー送信トリガーを設定しました(前日18時ごろ・当日9時ごろに自動実行されます)。');
+}
+
+function formatDateStr(date) {
+  return Utilities.formatDate(date, CONFIG.TIMEZONE, 'yyyy-MM-dd');
 }
 
 function parseDateStr(dateStr) {

@@ -58,6 +58,16 @@ clasp 初回セットアップ(運用担当者アカウントで1回のみ): `np
 
 **簡易レート制限は `LockService` の排他区間に相乗り**: `checkGlobalFloodGuard` / `checkPhoneRateLimit` / `markPhoneRateLimit` は `CacheService` の get→put で実装しているが、呼び出し元(`submitBooking`)がすでに `LockService.getScriptLock()` を保持した中で実行されるため、素朴な read-then-write でも競合しない。この関数群を他の場所(ロック外)から呼ぶ場合は別途排他を検討すること。
 
+### 前日・当日リマインダーメール
+
+`sendDayBeforeReminders()` / `sendSameDayReminders()` は時間主導トリガー(`setupReminderTrigger()` を Apps Script エディタで1回手動実行して作成する。コードのpushだけではトリガーは作られない)から呼ばれ、内部で共通の `sendRemindersOfKind(kind)` を呼ぶ。当日分は毎日9時ごろ、前日分は毎日18時ごろに実行される想定(`atHour` はトリガー作成時に固定される)。
+
+- 二重送信防止のため、`SHEET_HEADERS`/`COL` 末尾の `REMINDER_SENT`(リマインダー送信済み)列にカンマ区切りで `'day_before'` / `'same_day'` を記録する。送信対象の判定はこの文字列に対象の kind が含まれているかどうかで行う。
+- `updateReservationAdmin` で予約の日付・時間が変更された場合、この列は空文字にリセットされる(古い日時に対する送信済みフラグを新しい日時にそのまま引き継ぐと、新しい日時への本来必要なリマインダーが誤って送られなくなるため)。日付・時間が変わっていなければ既存値をそのまま維持する。
+- `CONFIG.REMINDER_DAY_BEFORE_ENABLED` / `REMINDER_SAME_DAY_ENABLED` は個別のON/OFFのみを制御し、トリガー自体の有無とは独立している(`false` でもトリガーは残るが、`sendRemindersOfKind` の先頭で何もせず終了する)。
+- 日付の比較には `formatDateStr(date)`(`Utilities.formatDate` を `CONFIG.TIMEZONE` で使うラッパー)を使うこと。既存の `getConfirmedRangesForDate` 等と同様、シートの日付セルは `String(row[COL.DATE])` で文字列として扱う前提になっている。
+- 他店舗展開時は、`create-store.js` の再実行や `clasp push` だけではトリガーは複製されない。新規店舗ごとに、その店舗の Apps Script エディタで `setupReminderTrigger` を1回実行する必要がある(README.md 参照)。
+
 ### Windows での clasp 呼び出しの注意
 
 `create-store.js --deploy` は Windows 上で `clasp` を `shell: true` 経由の `.cmd` シムとして呼ぶと日本語・空白入り引数が壊れるため、`.cmd` の中身を解析して実体の `node <entry.js>` を直接 `execFileSync` で叩く(`resolveClaspInvocation()`)。clasp 呼び出し部分を変更する際はこの回避策を維持すること。
