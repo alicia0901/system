@@ -240,14 +240,14 @@
       margin-left: 14px;
     }
 
-    #addCard, #editCard, #coursesCard, #hoursCard, #statsCard {
+    #addCard, #editCard, #coursesCard, #hoursCard, #statsCard, #weekCard {
       display: none;
       margin-bottom: 18px;
       padding: 18px;
       border: 1px dashed var(--border);
       border-radius: 10px;
     }
-    #addCard h2, #editCard h2, #coursesCard h2, #hoursCard h2, #statsCard h2 {
+    #addCard h2, #editCard h2, #coursesCard h2, #hoursCard h2, #statsCard h2, #weekCard h2 {
       font-size: 15px;
       margin: 0 0 4px;
       color: var(--main-dark);
@@ -415,6 +415,50 @@
     }
     .statTile .num { font-size: 20px; font-weight: bold; color: var(--main-dark); }
     .statTile .label { font-size: 11px; color: #777; margin-top: 4px; }
+
+    /* ---- 週間ビュー ---- */
+    .weekNavRow {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .weekNavRow button {
+      background: #fff;
+      border: 1px solid var(--main);
+      color: var(--main);
+      padding: 8px 14px;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+    .weekLabel { font-weight: bold; font-size: 14px; color: var(--main-dark); }
+    .weekDayRow {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 8px;
+      cursor: pointer;
+    }
+    .weekDayRow:hover, .weekDayRow:active { background: var(--bg); }
+    .weekDayRow.today { border-color: var(--main); border-width: 2px; }
+    .weekDayDate { font-weight: bold; font-size: 14px; white-space: nowrap; }
+    .weekDayDate.sun { color: var(--danger); }
+    .weekDayDate.sat { color: var(--edit); }
+    .weekDayInfo { font-size: 13px; color: #555; text-align: right; }
+    button#weekCancelBtn {
+      background: #eee;
+      color: #555;
+      padding: 13px 18px;
+      font-size: 15px;
+      font-weight: normal;
+      margin-top: 4px;
+    }
+    #weekMsg { margin-top: 10px; font-size: 13px; color: var(--danger); }
     #addCard input[type="text"], #addCard input[type="tel"], #addCard input[type="email"],
     #addCard input[type="date"], #addCard input[type="time"], #addCard input[type="number"],
     #addCard select, #addCard textarea,
@@ -500,6 +544,7 @@
     </div>
 
     <div class="settingsRow">
+      <button id="weekBtn" type="button"><span class="icon" data-icon="gear" data-icon-size="14"></span>週間ビュー</button>
       <button id="statsBtn" type="button"><span class="icon" data-icon="gear" data-icon-size="14"></span>集計を見る</button>
       <button id="hoursBtn" type="button"><span class="icon" data-icon="gear" data-icon-size="14"></span>営業時間・休業日</button>
       <button id="coursesBtn" type="button"><span class="icon" data-icon="gear" data-icon-size="14"></span>コースの設定</button>
@@ -649,6 +694,21 @@
       <div id="hoursMsg"></div>
     </div>
 
+    <div id="weekCard">
+      <h2>週間ビュー</h2>
+      <p style="font-size:13px;color:#777;margin:0 0 14px;">1週間分の予約状況をまとめて確認できます。日付をタップするとその日の一覧に切り替わります。</p>
+      <div class="weekNavRow">
+        <button type="button" id="weekPrevBtn">‹ 前の週</button>
+        <span class="weekLabel" id="weekLabel"></span>
+        <button type="button" id="weekNextBtn">次の週 ›</button>
+      </div>
+      <div id="weekDaysWrap"></div>
+      <div>
+        <button id="weekCancelBtn">閉じる</button>
+      </div>
+      <div id="weekMsg"></div>
+    </div>
+
     <div id="statsCard">
       <h2>集計</h2>
       <div class="statsRangeRow">
@@ -690,6 +750,8 @@
     var TOKEN = sessionStorage.getItem('adminToken') || null;
     var MODE = null; // null | 'edit' | 'cancel' … 一覧の予約をタップした時の動作
     var LAST_RESERVATIONS = [];
+    var WEEK_START = null; // 週間ビューで表示中の週の開始日(月曜, 'YYYY-MM-DD')
+    var WEEKDAY_LABELS = ['日', '月', '火', '水', '木', '金', '土'];
 
     // ---- アイコン(絵文字の代わりに使うオリジナルSVG。currentColorでボタン/文字の色を継承する) ----
     var ICONS = {
@@ -771,6 +833,11 @@
         btn.addEventListener('click', function () { applyStatsPreset(btn.dataset.preset); });
       });
 
+      document.getElementById('weekBtn').addEventListener('click', function () { toggleWeekForm(true); });
+      document.getElementById('weekCancelBtn').addEventListener('click', function () { toggleWeekForm(false); });
+      document.getElementById('weekPrevBtn').addEventListener('click', function () { shiftWeek(-7); });
+      document.getElementById('weekNextBtn').addEventListener('click', function () { shiftWeek(7); });
+
       google.script.run.withSuccessHandler(onAdminConfig).getConfig();
 
       if (TOKEN) {
@@ -800,6 +867,7 @@
       document.getElementById('coursesCard').style.display = 'none';
       document.getElementById('hoursCard').style.display = 'none';
       document.getElementById('statsCard').style.display = 'none';
+      document.getElementById('weekCard').style.display = 'none';
     }
 
     // ---- 「変更する」「キャンセルする」の選択モード ----
@@ -969,6 +1037,7 @@
         setMode(null); toggleAddForm(false); toggleEditForm(false);
         document.getElementById('hoursCard').style.display = 'none';
         document.getElementById('statsCard').style.display = 'none';
+        document.getElementById('weekCard').style.display = 'none';
       }
       document.getElementById('coursesCard').style.display = show ? 'block' : 'none';
       if (show) {
@@ -1112,6 +1181,7 @@
         setMode(null); toggleAddForm(false); toggleEditForm(false);
         document.getElementById('coursesCard').style.display = 'none';
         document.getElementById('statsCard').style.display = 'none';
+        document.getElementById('weekCard').style.display = 'none';
       }
       document.getElementById('hoursCard').style.display = show ? 'block' : 'none';
       if (show) {
@@ -1354,6 +1424,7 @@
         setMode(null); toggleAddForm(false); toggleEditForm(false);
         document.getElementById('coursesCard').style.display = 'none';
         document.getElementById('hoursCard').style.display = 'none';
+        document.getElementById('weekCard').style.display = 'none';
       }
       document.getElementById('statsCard').style.display = show ? 'block' : 'none';
       if (show) {
@@ -1435,6 +1506,112 @@
         tile.className = 'statTile';
         tile.innerHTML = '<div class="num">' + escapeHtml(t.num) + '</div><div class="label">' + escapeHtml(t.label) + '</div>';
         wrap.appendChild(tile);
+      });
+    }
+
+    // ---- 週間ビュー ----
+    function parseLocalDate(dateStr) {
+      var parts = dateStr.split('-').map(Number);
+      return new Date(parts[0], parts[1] - 1, parts[2]);
+    }
+
+    function addDaysStr(dateStr, n) {
+      var d = parseLocalDate(dateStr);
+      d.setDate(d.getDate() + n);
+      return toDateStr(d);
+    }
+
+    function mondayOf(dateStr) {
+      var d = parseLocalDate(dateStr);
+      var diff = (d.getDay() + 6) % 7; // 月曜=0, 火曜=1, … 日曜=6 になるようずらす
+      d.setDate(d.getDate() - diff);
+      return toDateStr(d);
+    }
+
+    function formatMD(dateStr) {
+      var parts = dateStr.split('-');
+      return Number(parts[1]) + '/' + Number(parts[2]);
+    }
+
+    function toggleWeekForm(show) {
+      if (show) {
+        setMode(null); toggleAddForm(false); toggleEditForm(false);
+        document.getElementById('coursesCard').style.display = 'none';
+        document.getElementById('hoursCard').style.display = 'none';
+        document.getElementById('statsCard').style.display = 'none';
+      }
+      document.getElementById('weekCard').style.display = show ? 'block' : 'none';
+      if (show) {
+        document.getElementById('weekMsg').textContent = '';
+        document.getElementById('weekCard').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        WEEK_START = mondayOf(document.getElementById('targetDate').value || toDateStr(new Date()));
+        loadWeek();
+      }
+    }
+
+    function shiftWeek(days) {
+      WEEK_START = addDaysStr(WEEK_START, days);
+      loadWeek();
+    }
+
+    function loadWeek() {
+      if (!TOKEN || !WEEK_START) return;
+      document.getElementById('weekMsg').textContent = '読み込み中...';
+      document.getElementById('weekDaysWrap').innerHTML = '';
+      document.getElementById('weekLabel').textContent = formatMD(WEEK_START) + ' 〜 ' + formatMD(addDaysStr(WEEK_START, 6));
+
+      google.script.run
+        .withSuccessHandler(function (res) {
+          if (res.authError) {
+            doLogout();
+            document.getElementById('loginMsg').textContent = res.message;
+            return;
+          }
+          if (!res.success) {
+            document.getElementById('weekMsg').textContent = res.message || '取得に失敗しました。';
+            return;
+          }
+          document.getElementById('weekMsg').textContent = '';
+          renderWeek(res.days);
+        })
+        .withFailureHandler(function (err) {
+          document.getElementById('weekMsg').textContent = 'エラー: ' + err.message;
+        })
+        .getWeekForAdmin(TOKEN, WEEK_START);
+    }
+
+    function renderWeek(days) {
+      var wrap = document.getElementById('weekDaysWrap');
+      wrap.innerHTML = '';
+      var todayStr = toDateStr(new Date());
+
+      (days || []).forEach(function (day) {
+        var wd = parseLocalDate(day.date).getDay();
+        var row = document.createElement('div');
+        row.className = 'weekDayRow' + (day.date === todayStr ? ' today' : '');
+
+        var dateEl = document.createElement('div');
+        dateEl.className = 'weekDayDate' + (wd === 0 ? ' sun' : wd === 6 ? ' sat' : '');
+        dateEl.textContent = formatMD(day.date) + '(' + WEEKDAY_LABELS[wd] + ')';
+
+        var infoEl = document.createElement('div');
+        infoEl.className = 'weekDayInfo';
+        if (day.closed) {
+          infoEl.innerHTML = '<span class="badge cancelled">定休日</span>';
+        } else {
+          infoEl.innerHTML = day.count + '組 / ' + day.reservedSeats + ' / ' + day.seatsTotal + '席' +
+            (day.waitlistCount ? '<span class="badge waitlist">待ち' + day.waitlistCount + '</span>' : '');
+        }
+
+        row.appendChild(dateEl);
+        row.appendChild(infoEl);
+        row.addEventListener('click', function () {
+          document.getElementById('targetDate').value = day.date;
+          toggleWeekForm(false);
+          loadList();
+        });
+
+        wrap.appendChild(row);
       });
     }
 

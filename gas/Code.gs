@@ -523,6 +523,65 @@ function getReservationsForAdmin(token, dateStr) {
 }
 
 /**
+ * 管理画面: 指定日を起点とする7日間の予約状況を日ごとに集計して返す(週間ビュー用)。
+ * 1日ずつ getReservationsForAdmin を呼ぶとシート全体を7回走査することになるため、
+ * 1回のシート読み込みで7日分をまとめて集計する。
+ * @param {string} token
+ * @param {string} fromDateStr 週の開始日 'YYYY-MM-DD'
+ */
+function getWeekForAdmin(token, fromDateStr) {
+  if (!isValidAdminToken(token)) {
+    return { success: false, authError: true, message: 'ログインの有効期限が切れました。再度ログインしてください。' };
+  }
+
+  const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+  if (!datePattern.test(fromDateStr)) {
+    return { success: false, message: '日付の指定が不正です。' };
+  }
+
+  const start = parseDateStr(fromDateStr);
+  const dateStrs = [];
+  for (let i = 0; i < 7; i++) {
+    dateStrs.push(formatDateStr(new Date(start.getTime() + i * 24 * 60 * 60 * 1000)));
+  }
+
+  const sheet = getOrCreateSheet();
+  const values = sheet.getDataRange().getValues();
+  const byDate = {};
+  dateStrs.forEach(function (d) { byDate[d] = { reservedSeats: 0, count: 0, waitlistCount: 0 }; });
+
+  for (let r = 1; r < values.length; r++) {
+    const row = values[r];
+    const dateStr = String(row[COL.DATE]);
+    const bucket = byDate[dateStr];
+    if (!bucket) continue;
+    const status = row[COL.STATUS];
+    if (status === STATUS_CONFIRMED) {
+      bucket.reservedSeats += Number(row[COL.PARTY_SIZE]) || 0;
+      bucket.count++;
+    } else if (status === STATUS_WAITLIST) {
+      bucket.waitlistCount++;
+    }
+  }
+
+  const days = dateStrs.map(function (d) {
+    const hours = getBusinessHoursForDate(d);
+    const bucket = byDate[d];
+    return {
+      date: d,
+      closed: hours.closed,
+      note: hours.note,
+      seatsTotal: CONFIG.SEATS_TOTAL,
+      reservedSeats: bucket.reservedSeats,
+      count: bucket.count,
+      waitlistCount: bucket.waitlistCount,
+    };
+  });
+
+  return { success: true, days: days };
+}
+
+/**
  * 管理画面からの手動予約登録(電話予約など、システム外で受けた予約を反映する用)。要ログイン。
  * オンライン予約フォームと違い、メールアドレスは任意。force=true で定休日・営業時間外・
  * 満席チェックを無視して強制的に登録できる(例外対応用)。
