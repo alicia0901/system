@@ -62,6 +62,11 @@ const CONFIG = {
   // 管理画面(?page=admin)のログインパスワード。必ずデフォルトから変更してください。
   ADMIN_PASSWORD: 'changeme',
 
+  // 営業時間帯(中抜け営業に対応)。空配列なら BUSINESS_START_HOUR/BUSINESS_END_HOUR から
+  // 1帯を組み立てる(後方互換)。指定する場合は BUSINESS_START_HOUR/END_HOUR は無視される。
+  // 例: [{ start: '11:00', end: '14:30' }, { start: '17:00', end: '22:00' }]
+  BUSINESS_PERIODS: [],
+
   // 満席の時間帯でも「キャンセル待ち」としての登録を受け付けるか
   WAITLIST_ENABLED: true,
 
@@ -86,14 +91,14 @@ const CONFIG = {
 const SHEET_HEADERS = [
   '受付日時', '氏名', 'フリガナ', '電話番号', 'メールアドレス',
   '予約日', '予約時間', '人数', 'コース', 'ご要望', 'ステータス', 'カレンダーイベントID',
-  '申込経路', 'LINE表示名', 'リマインダー送信済み',
+  '申込経路', 'LINE表示名', 'リマインダー送信済み', '空き通知日時',
 ];
 
 // 列インデックス(0始まり)
 const COL = {
   RECEIVED_AT: 0, NAME: 1, KANA: 2, PHONE: 3, EMAIL: 4,
   DATE: 5, TIME: 6, PARTY_SIZE: 7, COURSE: 8, NOTES: 9, STATUS: 10, EVENT_ID: 11,
-  ROUTE: 12, LINE_NAME: 13, REMINDER_SENT: 14,
+  ROUTE: 12, LINE_NAME: 13, REMINDER_SENT: 14, WAITLIST_NOTIFIED: 15,
 };
 
 // 申込経路の値
@@ -112,6 +117,14 @@ const ADMIN_SESSION_TTL_SEC = 6 * 60 * 60; // 6時間
 // CONFIG.COURSES は setup/create-store.js による再生成で上書きされる「初期値」の位置づけとし、
 // 管理画面からの変更はここに保存することで、共通エンジンの更新や再生成に影響されないようにする。
 const COURSES_PROPERTY_KEY = 'COURSES_OVERRIDE';
+
+// 管理画面から変更した営業時間・臨時休業日設定を保存するプロパティキー。
+// COURSES_PROPERTY_KEY と同じ考え方(CONFIG は初期値、実運用値はここ)。
+const BUSINESS_HOURS_PROPERTY_KEY = 'BUSINESS_HOURS_OVERRIDE';
+
+// キャンセル待ちへの空席通知メール、1回のキャンセル処理につき送る上限件数
+// (登録順の先着何件かに絞ることで、通知殺到を避ける)
+const WAITLIST_NOTIFY_MAX_PER_RUN = 5;
 
 // ==================== Web App エントリポイント ====================
 
@@ -153,6 +166,92 @@ function getEffectiveCourses() {
   return CONFIG.COURSES;
 }
 
+/**
+ * 現在有効な営業時間・臨時休業日設定を返す。
+ * 管理画面から変更されていれば PropertiesService に保存された内容を、
+ * まだ変更されていなければ CONFIG(BUSINESS_PERIODS または旧来の
+ * BUSINESS_START_HOUR/END_HOUR)から組み立てた既定値を返す。
+ * @return {{periods: Array<{start: string, end: string}>, specialDays: Array<Object>}}
+ */
+function getBusinessSettings() {
+  try {
+    const raw = PropertiesService.getScriptProperties().getProperty(BUSINESS_HOURS_PROPERTY_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && Array.isArray(parsed.periods) && parsed.periods.length > 0) {
+        return { periods: parsed.periods, specialDays: Array.isArray(parsed.specialDays) ? parsed.specialDays : [] };
+      }
+    }
+  } catch (e) {
+    Logger.log('営業時間設定の読み込みエラー: ' + e.message);
+  }
+  return { periods: getDefaultBusinessPeriods(), specialDays: [] };
+}
+
+/**
+ * CONFIG.BUSINESS_PERIODS を既定の営業時間帯として返す。
+ * 空配列(未設定)の場合は、後方互換のため BUSINESS_START_HOUR/END_HOUR から1帯を組み立てる。
+ */
+function getDefaultBusinessPeriods() {
+  if (Array.isArray(CONFIG.BUSINESS_PERIODS) && CONFIG.BUSINESS_PERIODS.length > 0) {
+    return CONFIG.BUSINESS_PERIODS;
+  }
+  return [{
+    start: pad2(CONFIG.BUSINESS_START_HOUR) + ':00',
+    end: pad2(CONFIG.BUSINESS_END_HOUR) + ':00',
+  }];
+}
+
+function pad2(n) { return n < 10 ? '0' + n : '' + n; }
+
+/**
+ * 'HH:MM' を「0時からの分」に変換する。
+ */
+function hhmmToMinutes(hhmm) {
+  const parts = String(hhmm).split(':').map(Number);
+  return parts[0] * 60 + (parts[1] || 0);
+}
+
+/**
+ * 指定日の営業状況を返す。曜日定休(CLOSED_WEEKDAYS)より、その日の specialDays 設定を優先する。
+ * @param {string} dateStr 'YYYY-MM-DD'
+ * @return {{closed: boolean, note: string, periods: Array<{startMin: number, endMin: number}>}}
+ *   periods は closed=true の場合は空配列。
+ */
+function getBusinessHoursForDate(dateStr) {
+  const settings = getBusinessSettings();
+  const special = settings.specialDays.filter(function (d) { return d.date === dateStr; })[0];
+
+  let closed;
+  let periodsRaw;
+  let note = (special && special.note) || '';
+
+  if (special) {
+    // specialDays の設定は曜日定休より優先する
+    closed = !!special.closed;
+    periodsRaw = (!closed && Array.isArray(special.periods) && special.periods.length > 0)
+      ? special.periods
+      : settings.periods;
+  } else {
+    const weekday = parseDateStr(dateStr).getDay();
+    closed = CONFIG.CLOSED_WEEKDAYS.indexOf(weekday) !== -1;
+    periodsRaw = settings.periods;
+  }
+
+  const periods = closed ? [] : periodsRaw.map(function (p) {
+    return { startMin: hhmmToMinutes(p.start), endMin: hhmmToMinutes(p.end) };
+  });
+
+  return { closed: closed, note: note, periods: periods };
+}
+
+/**
+ * [startMin, endMin) の予約枠が、営業時間帯のいずれか1つに完全に収まっているか。
+ */
+function isWithinBusinessPeriods(periods, startMin, endMin) {
+  return periods.some(function (p) { return startMin >= p.startMin && endMin <= p.endMin; });
+}
+
 // ==================== お客様側: クライアントから呼ばれる関数 ====================
 
 /**
@@ -180,11 +279,12 @@ function getConfig() {
  * @param {string} dateStr 'YYYY-MM-DD'
  */
 function getDaySchedule(dateStr) {
-  const date = parseDateStr(dateStr);
-  const weekday = date.getDay();
+  const hours = getBusinessHoursForDate(dateStr);
 
   const result = {
-    closed: CONFIG.CLOSED_WEEKDAYS.indexOf(weekday) !== -1,
+    closed: hours.closed,
+    note: hours.note,
+    periods: hours.periods, // [{startMin, endMin}]
     bookedRanges: [], // [{startMin, endMin, partySize}]
   };
 
@@ -248,15 +348,15 @@ function submitBooking(form) {
       return { success: false, message: 'ご予約可能な期間を超えています。' };
     }
 
-    // ---- 定休日チェック ----
-    if (CONFIG.CLOSED_WEEKDAYS.indexOf(start.getDay()) !== -1) {
-      return { success: false, message: '選択された日付は定休日です。' };
+    // ---- 定休日・営業時間チェック ----
+    const businessHours = getBusinessHoursForDate(form.date);
+    if (businessHours.closed) {
+      return { success: false, message: '選択された日付は休業日です。' + (businessHours.note ? '(' + businessHours.note + ')' : '') };
     }
 
-    // ---- 営業時間チェック ----
     const startMin = minutesSinceMidnight(start);
     const endMin = minutesSinceMidnight(end);
-    if (startMin < CONFIG.BUSINESS_START_HOUR * 60 || endMin > CONFIG.BUSINESS_END_HOUR * 60) {
+    if (!isWithinBusinessPeriods(businessHours.periods, startMin, endMin)) {
       return { success: false, message: '営業時間外の時間帯です(お食事の時間を含め営業時間内でご予約ください)。' };
     }
 
@@ -290,6 +390,7 @@ function submitBooking(form) {
           route,
           lineDisplayName,
           '', // リマインダー未送信
+          '', // 空き通知未送信
         ]);
 
         markPhoneRateLimit(form.phone);
@@ -342,6 +443,7 @@ function submitBooking(form) {
       route,
       lineDisplayName,
       '', // リマインダー未送信
+      '', // 空き通知未送信
     ]);
 
     // ---- 確認メール送信(失敗しても予約は成立させる) ----
@@ -458,13 +560,14 @@ function createReservationAdmin(token, form) {
     const force = !!form.force;
 
     if (!force) {
-      if (CONFIG.CLOSED_WEEKDAYS.indexOf(start.getDay()) !== -1) {
-        return { success: false, message: '選択された日付は定休日です(強制登録を使えば無視できます)。' };
+      const businessHours = getBusinessHoursForDate(form.date);
+      if (businessHours.closed) {
+        return { success: false, message: '選択された日付は休業日です(強制登録を使えば無視できます)。' + (businessHours.note ? '(' + businessHours.note + ')' : '') };
       }
 
       const startMin = minutesSinceMidnight(start);
       const endMin = minutesSinceMidnight(end);
-      if (startMin < CONFIG.BUSINESS_START_HOUR * 60 || endMin > CONFIG.BUSINESS_END_HOUR * 60) {
+      if (!isWithinBusinessPeriods(businessHours.periods, startMin, endMin)) {
         return { success: false, message: '営業時間外の時間帯です(強制登録を使えば無視できます)。' };
       }
 
@@ -511,6 +614,7 @@ function createReservationAdmin(token, form) {
       ROUTE_STAFF,
       '',
       '', // リマインダー未送信
+      '', // 空き通知未送信
     ]);
 
     // 店舗スタッフ自身の登録のため、通知メールは送らずお客様への確認メールのみ送る
@@ -574,13 +678,14 @@ function updateReservationAdmin(token, rowIndex, form) {
     const force = !!form.force;
 
     if (!force) {
-      if (CONFIG.CLOSED_WEEKDAYS.indexOf(start.getDay()) !== -1) {
-        return { success: false, message: '選択された日付は定休日です(強制変更を使えば無視できます)。' };
+      const businessHours = getBusinessHoursForDate(form.date);
+      if (businessHours.closed) {
+        return { success: false, message: '選択された日付は休業日です(強制変更を使えば無視できます)。' + (businessHours.note ? '(' + businessHours.note + ')' : '') };
       }
 
       const startMin = minutesSinceMidnight(start);
       const endMin = minutesSinceMidnight(end);
-      if (startMin < CONFIG.BUSINESS_START_HOUR * 60 || endMin > CONFIG.BUSINESS_END_HOUR * 60) {
+      if (!isWithinBusinessPeriods(businessHours.periods, startMin, endMin)) {
         return { success: false, message: '営業時間外の時間帯です(強制変更を使えば無視できます)。' };
       }
 
@@ -607,8 +712,19 @@ function updateReservationAdmin(token, rowIndex, form) {
 
     // 日付・時間が変わった場合、以前の枠に対するリマインダー送信済みフラグは無効になるためリセットする
     // (変わっていなければ、既に送信済みのリマインダーを二重送信しないよう維持する)
-    const dateTimeChanged = String(row[COL.DATE]) !== form.date || String(row[COL.TIME]) !== form.time;
+    const prevDate = String(row[COL.DATE]);
+    const dateTimeChanged = prevDate !== form.date || String(row[COL.TIME]) !== form.time;
     const reminderSent = dateTimeChanged ? '' : (row[COL.REMINDER_SENT] || '');
+
+    // 変更前の日付で座席に空きが出る可能性がある変更かどうか
+    // (日付が変わった / 人数が減った / コースの滞在時間が短くなった)。
+    // これに該当すれば、変更後に変更前の日付のキャンセル待ちへ空席通知を試みる。
+    const prevPartySize = Number(row[COL.PARTY_SIZE]) || 0;
+    const prevCourseDef = getEffectiveCourses().filter(function (c) { return c.name === row[COL.COURSE]; })[0];
+    const prevDuration = prevCourseDef ? prevCourseDef.duration : CONFIG.SLOT_MINUTES;
+    const mayFreeUpSeats = status === STATUS_CONFIRMED && (
+      prevDate !== form.date || partySize < prevPartySize || courseDef.duration < prevDuration
+    );
 
     // 確定済み予約のみカレンダーと連動させる(キャンセル待ちはまだカレンダー未登録のため対象外)
     let eventId = row[COL.EVENT_ID];
@@ -645,7 +761,12 @@ function updateReservationAdmin(token, rowIndex, form) {
       row[COL.ROUTE] || ROUTE_WEB, // 申込経路・LINE表示名は変更内容に含まれないので元の値を維持する
       row[COL.LINE_NAME] || '',
       reminderSent,
+      row[COL.WAITLIST_NOTIFIED] || '',
     ]]);
+
+    if (mayFreeUpSeats) {
+      notifyWaitlistOfOpening(prevDate);
+    }
 
     return { success: true };
   } catch (err) {
@@ -751,6 +872,9 @@ function cancelReservationAdmin(token, rowIndex) {
       return { success: false, message: 'この予約は既にキャンセル済みです。' };
     }
 
+    const wasConfirmed = row[COL.STATUS] === STATUS_CONFIRMED;
+    const dateStr = String(row[COL.DATE]);
+
     sheet.getRange(rowIndex, COL.STATUS + 1).setValue(STATUS_CANCELLED);
 
     const eventId = row[COL.EVENT_ID];
@@ -762,6 +886,11 @@ function cancelReservationAdmin(token, rowIndex) {
       } catch (calErr) {
         Logger.log('カレンダー削除エラー: ' + calErr.message);
       }
+    }
+
+    // 確定していた予約のキャンセルで座席に空きが出た場合、その日のキャンセル待ちへ通知する
+    if (wasConfirmed) {
+      notifyWaitlistOfOpening(dateStr);
     }
 
     return { success: true };
@@ -828,6 +957,171 @@ function resetCoursesAdmin(token) {
   }
   PropertiesService.getScriptProperties().deleteProperty(COURSES_PROPERTY_KEY);
   return { success: true, courses: CONFIG.COURSES };
+}
+
+/**
+ * 現在の営業時間・臨時休業日設定を返す(管理画面用)。要ログイン。
+ */
+function getBusinessHoursForAdmin(token) {
+  if (!isValidAdminToken(token)) {
+    return { success: false, authError: true, message: 'ログインの有効期限が切れました。再度ログインしてください。' };
+  }
+  return { success: true, settings: getBusinessSettings(), closedWeekdays: CONFIG.CLOSED_WEEKDAYS };
+}
+
+/**
+ * 営業時間・臨時休業日設定を変更する(管理画面用)。要ログイン。
+ * 変更内容は PropertiesService に保存され、CONFIG(店舗設定の初期値)には影響しない。
+ * @param {string} token
+ * @param {{periods: Array<{start: string, end: string}>, specialDays: Array<Object>}} settings
+ */
+function updateBusinessHoursAdmin(token, settings) {
+  if (!isValidAdminToken(token)) {
+    return { success: false, authError: true, message: 'ログインの有効期限が切れました。再度ログインしてください。' };
+  }
+
+  const periodsIn = (settings && settings.periods) || [];
+  if (!Array.isArray(periodsIn) || periodsIn.length === 0) {
+    return { success: false, message: '営業時間帯を1つ以上設定してください。' };
+  }
+
+  const timePattern = /^([01]\d|2[0-3]):([0-5]\d)$/;
+  const periods = [];
+  for (let i = 0; i < periodsIn.length; i++) {
+    const p = periodsIn[i] || {};
+    const start = String(p.start || '').trim();
+    const end = String(p.end || '').trim();
+    if (!timePattern.test(start) || !timePattern.test(end)) {
+      return { success: false, message: (i + 1) + '件目の営業時間帯は HH:MM の形式で入力してください。' };
+    }
+    if (hhmmToMinutes(start) >= hhmmToMinutes(end)) {
+      return { success: false, message: (i + 1) + '件目の営業時間帯は終了時刻が開始時刻より後になるようにしてください。' };
+    }
+    periods.push({ start: start, end: end });
+  }
+
+  const specialDaysIn = (settings && settings.specialDays) || [];
+  const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+  const specialDays = [];
+  const seenDates = {};
+  const todayStr = formatDateStr(new Date());
+  for (let i = 0; i < specialDaysIn.length; i++) {
+    const d = specialDaysIn[i] || {};
+    const date = String(d.date || '').trim();
+    if (!datePattern.test(date)) {
+      return { success: false, message: (i + 1) + '件目の日付は YYYY-MM-DD の形式で入力してください。' };
+    }
+    if (date < todayStr) continue; // 過去日は保存時に自動で取り除く(肥大化防止)
+    if (seenDates[date]) {
+      return { success: false, message: '日付「' + date + '」が特別な日の一覧で重複しています。' };
+    }
+
+    const closed = !!d.closed;
+    const entry = { date: date, closed: closed, note: String(d.note || '').trim() };
+
+    if (!closed) {
+      const specialPeriodsIn = Array.isArray(d.periods) ? d.periods : [];
+      if (specialPeriodsIn.length > 0) {
+        const specialPeriods = [];
+        for (let j = 0; j < specialPeriodsIn.length; j++) {
+          const sp = specialPeriodsIn[j] || {};
+          const start = String(sp.start || '').trim();
+          const end = String(sp.end || '').trim();
+          if (!timePattern.test(start) || !timePattern.test(end)) {
+            return { success: false, message: '「' + date + '」の営業時間帯は HH:MM の形式で入力してください。' };
+          }
+          if (hhmmToMinutes(start) >= hhmmToMinutes(end)) {
+            return { success: false, message: '「' + date + '」の営業時間帯は終了時刻が開始時刻より後になるようにしてください。' };
+          }
+          specialPeriods.push({ start: start, end: end });
+        }
+        entry.periods = specialPeriods;
+      }
+    }
+
+    seenDates[date] = true;
+    specialDays.push(entry);
+  }
+
+  const cleaned = { periods: periods, specialDays: specialDays };
+  PropertiesService.getScriptProperties().setProperty(BUSINESS_HOURS_PROPERTY_KEY, JSON.stringify(cleaned));
+  return { success: true, settings: cleaned };
+}
+
+/**
+ * 営業時間・臨時休業日設定を店舗設定の初期値に戻す(管理画面用)。要ログイン。
+ */
+function resetBusinessHoursAdmin(token) {
+  if (!isValidAdminToken(token)) {
+    return { success: false, authError: true, message: 'ログインの有効期限が切れました。再度ログインしてください。' };
+  }
+  PropertiesService.getScriptProperties().deleteProperty(BUSINESS_HOURS_PROPERTY_KEY);
+  return { success: true, settings: { periods: getDefaultBusinessPeriods(), specialDays: [] } };
+}
+
+/**
+ * 指定期間の予約統計を返す(管理画面用)。要ログイン。
+ * @param {string} token
+ * @param {string} fromDate 'YYYY-MM-DD'
+ * @param {string} toDate 'YYYY-MM-DD'
+ */
+function getStatsForAdmin(token, fromDate, toDate) {
+  if (!isValidAdminToken(token)) {
+    return { success: false, authError: true, message: 'ログインの有効期限が切れました。再度ログインしてください。' };
+  }
+
+  const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+  if (!datePattern.test(fromDate) || !datePattern.test(toDate)) {
+    return { success: false, message: '期間の指定が不正です。' };
+  }
+  if (fromDate > toDate) {
+    return { success: false, message: '開始日は終了日より前にしてください。' };
+  }
+  const maxRangeMs = 366 * 24 * 60 * 60 * 1000;
+  if (parseDateStr(toDate).getTime() - parseDateStr(fromDate).getTime() > maxRangeMs) {
+    return { success: false, message: '期間は最大1年以内で指定してください。' };
+  }
+
+  const sheet = getOrCreateSheet();
+  const values = sheet.getDataRange().getValues();
+
+  let confirmedCount = 0;
+  let confirmedPeople = 0;
+  let cancelledCount = 0;
+  let waitlistCount = 0;
+
+  for (let r = 1; r < values.length; r++) {
+    const row = values[r];
+    const dateStr = String(row[COL.DATE]);
+    if (dateStr < fromDate || dateStr > toDate) continue;
+
+    const status = row[COL.STATUS];
+    const partySize = Number(row[COL.PARTY_SIZE]) || 0;
+    if (status === STATUS_CONFIRMED) {
+      confirmedCount++;
+      confirmedPeople += partySize;
+    } else if (status === STATUS_CANCELLED) {
+      cancelledCount++;
+    } else if (status === STATUS_WAITLIST) {
+      waitlistCount++;
+    }
+  }
+
+  const totalForRate = confirmedCount + cancelledCount;
+  const cancelRate = totalForRate > 0 ? cancelledCount / totalForRate : 0;
+  const avgPartySize = confirmedCount > 0 ? confirmedPeople / confirmedCount : 0;
+
+  return {
+    success: true,
+    fromDate: fromDate,
+    toDate: toDate,
+    confirmedCount: confirmedCount,
+    confirmedPeople: confirmedPeople,
+    cancelledCount: cancelledCount,
+    cancelRate: cancelRate,
+    avgPartySize: avgPartySize,
+    waitlistCount: waitlistCount,
+  };
 }
 
 function isValidAdminToken(token) {
@@ -1005,6 +1299,93 @@ function sendWaitlistPromotedEmail(form, partySize) {
     MailApp.sendEmail(form.email, subject, body);
   } catch (err) {
     Logger.log('繰り上げ確定メール送信エラー: ' + err.message);
+  }
+}
+
+/**
+ * 指定日で座席に空きが出た可能性がある時(キャンセル、または予約変更による人数減・日付変更など)に呼ぶ。
+ * その日の「キャンセル待ち」のうち、現在の空席状況なら収まる予約へ「空きが出ました」メールを送る。
+ * ステータス自体は変更しない(確定は管理画面の「繰り上げ確定」で行う)。
+ * 一度通知した予約には再送しない(WAITLIST_NOTIFIED 列で判定)。
+ * 通知件数は WAITLIST_NOTIFY_MAX_PER_RUN 件(登録順の先着)までに絞る。
+ * @param {string} dateStr 'YYYY-MM-DD'
+ */
+function notifyWaitlistOfOpening(dateStr) {
+  const sheet = getOrCreateSheet();
+  const values = sheet.getDataRange().getValues();
+  let notifiedCount = 0;
+  let anyNotified = false;
+
+  for (let r = 1; r < values.length && notifiedCount < WAITLIST_NOTIFY_MAX_PER_RUN; r++) {
+    const row = values[r];
+    if (String(row[COL.DATE]) !== dateStr) continue;
+    if (row[COL.STATUS] !== STATUS_WAITLIST) continue;
+    if (row[COL.WAITLIST_NOTIFIED]) continue; // 通知済み
+
+    const timeStr = row[COL.TIME];
+    const start = parseDateTimeStr(dateStr, timeStr);
+    if (!start || isNaN(start.getTime())) continue;
+
+    const courseDef = getEffectiveCourses().filter(function (c) { return c.name === row[COL.COURSE]; })[0];
+    const duration = courseDef ? courseDef.duration : CONFIG.SLOT_MINUTES;
+    const end = new Date(start.getTime() + duration * 60000);
+    const startMin = minutesSinceMidnight(start);
+    const endMin = minutesSinceMidnight(end);
+    const partySize = Number(row[COL.PARTY_SIZE]) || 0;
+
+    // getConfirmedRangesForDate は都度シートを読み直す(直前の通知でステータスが
+    // 変わるわけではないため無駄はあるが、キャンセル待ちの件数は通常少ないため許容する)
+    const bookedRanges = getConfirmedRangesForDate(dateStr);
+    const reservedAtSlot = sumOverlappingPartySize(bookedRanges, startMin, endMin);
+    if (reservedAtSlot + partySize > CONFIG.SEATS_TOTAL) continue; // まだ空きなし
+
+    const form = {
+      name: row[COL.NAME], date: dateStr, time: timeStr,
+      course: row[COL.COURSE], email: row[COL.EMAIL], phone: row[COL.PHONE],
+    };
+    sendWaitlistOpeningEmail(form, partySize);
+
+    sheet.getRange(r + 1, COL.WAITLIST_NOTIFIED + 1).setValue(new Date());
+    notifiedCount++;
+    anyNotified = true;
+  }
+
+  if (anyNotified && CONFIG.NOTIFY_EMAIL) {
+    try {
+      MailApp.sendEmail(CONFIG.NOTIFY_EMAIL, '[空席通知] ' + dateStr + ' のキャンセル待ちへ通知しました',
+        dateStr + ' に空きが出たため、キャンセル待ちのお客様(' + notifiedCount + '件)へ空席通知メールを送信しました。\n' +
+        '繰り上げ確定は管理画面から行ってください。');
+    } catch (err) {
+      Logger.log('店舗への空席通知エラー: ' + err.message);
+    }
+  }
+}
+
+function sendWaitlistOpeningEmail(form, partySize) {
+  if (!form.email) return;
+  try {
+    const subject = '[' + (CONFIG.STORE_NAME || 'ご予約') + '] 空席のお知らせ (' + form.date + ' ' + form.time + ')';
+    const body = [
+      (form.name || '') + ' 様',
+      '',
+      'キャンセル待ちいただいておりましたご希望の時間帯に、空きが出ました。',
+      '',
+      '━━━━━━━━━━━━━━━',
+      'ご希望内容',
+      '━━━━━━━━━━━━━━━',
+      '日時: ' + form.date + ' ' + form.time,
+      '人数: ' + partySize + '名',
+      'コース: ' + form.course,
+      '━━━━━━━━━━━━━━━',
+      '',
+      '席数に限りがあり、先着順のご案内となります。ご希望の場合はお早めにお電話にてご連絡ください。',
+      '(このメールは空きが出たお知らせであり、まだご予約が確定したものではありません)',
+      '',
+      (CONFIG.STORE_NAME || ''),
+    ].join('\n');
+    MailApp.sendEmail(form.email, subject, body);
+  } catch (err) {
+    Logger.log('空席通知メール送信エラー: ' + err.message);
   }
 }
 

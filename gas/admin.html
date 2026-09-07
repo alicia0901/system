@@ -226,7 +226,7 @@
     }
 
     .settingsRow { text-align: right; margin: -6px 0 14px; }
-    button#coursesBtn {
+    .settingsRow button {
       display: inline-flex;
       align-items: center;
       gap: 4px;
@@ -237,16 +237,17 @@
       font-weight: normal;
       text-decoration: underline;
       padding: 4px 2px;
+      margin-left: 14px;
     }
 
-    #addCard, #editCard, #coursesCard {
+    #addCard, #editCard, #coursesCard, #hoursCard, #statsCard {
       display: none;
       margin-bottom: 18px;
       padding: 18px;
       border: 1px dashed var(--border);
       border-radius: 10px;
     }
-    #addCard h2, #editCard h2, #coursesCard h2 {
+    #addCard h2, #editCard h2, #coursesCard h2, #hoursCard h2, #statsCard h2 {
       font-size: 15px;
       margin: 0 0 4px;
       color: var(--main-dark);
@@ -281,7 +282,7 @@
       font-size: 13px;
       margin: 4px 0 4px;
     }
-    button#coursesResetBtn {
+    button#coursesResetBtn, button#hoursResetBtn {
       background: none;
       border: none;
       color: #888;
@@ -292,6 +293,128 @@
       display: block;
       padding: 4px 0;
     }
+
+    /* ---- 営業時間帯・特別な日の設定行 ---- */
+    .periodRow {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .periodRow input[type="time"] {
+      flex: 1;
+      min-width: 0;
+      padding: 9px 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 16px;
+    }
+    .periodSep { font-size: 13px; color: #777; flex: none; }
+    .specialRow {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 10px;
+    }
+    .specialRowMain {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .specialRowMain input[type="date"] {
+      flex: 1;
+      min-width: 0;
+      padding: 9px 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 16px;
+    }
+    .specialRowMain select {
+      flex: none;
+      padding: 9px 6px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 13px;
+    }
+    .specialPeriodsWrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .specialPeriodsWrap input[type="time"] {
+      flex: 1;
+      min-width: 0;
+      padding: 9px 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 16px;
+    }
+    .specialRow input.specialNote {
+      width: 100%;
+      padding: 9px 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 14px;
+    }
+    button#hoursAddPeriodBtn, button#hoursAddSpecialBtn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: #fff;
+      border: 1px solid var(--main);
+      color: var(--main);
+      padding: 8px 14px;
+      font-size: 13px;
+      margin: 4px 0 4px;
+    }
+    button#hoursSubmitBtn, button#hoursCancelBtn {
+      padding: 13px 18px;
+      font-size: 15px;
+      margin-top: 18px;
+    }
+    button#hoursSubmitBtn { background: var(--main); color: #fff; margin-right: 8px; }
+    button#hoursSubmitBtn:disabled { background: #aaa; cursor: not-allowed; }
+    button#hoursCancelBtn { background: #eee; color: #555; font-weight: normal; }
+    #hoursMsg { margin-top: 10px; font-size: 13px; color: var(--danger); }
+
+    /* ---- 集計 ---- */
+    .statsRangeRow { display: flex; gap: 8px; flex-wrap: wrap; }
+    button.statsPresetBtn {
+      background: #fff;
+      border: 1px solid var(--main);
+      color: var(--main);
+      padding: 8px 14px;
+      font-size: 13px;
+      border-radius: 999px;
+    }
+    button.statsPresetBtn.active { background: var(--main); color: #fff; }
+    button#statsLoadBtn, button#statsCancelBtn {
+      padding: 13px 18px;
+      font-size: 15px;
+      margin-top: 18px;
+    }
+    button#statsLoadBtn { background: var(--main); color: #fff; margin-right: 8px; }
+    button#statsCancelBtn { background: #eee; color: #555; font-weight: normal; }
+    #statsMsg { margin-top: 10px; font-size: 13px; color: var(--danger); }
+    .statsGrid {
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 18px;
+    }
+    @media (min-width: 480px) {
+      .statsGrid { grid-template-columns: repeat(3, 1fr); }
+    }
+    .statTile {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 8px;
+      text-align: center;
+    }
+    .statTile .num { font-size: 20px; font-weight: bold; color: var(--main-dark); }
+    .statTile .label { font-size: 11px; color: #777; margin-top: 4px; }
     #addCard input[type="text"], #addCard input[type="tel"], #addCard input[type="email"],
     #addCard input[type="date"], #addCard input[type="time"], #addCard input[type="number"],
     #addCard select, #addCard textarea,
@@ -377,6 +500,8 @@
     </div>
 
     <div class="settingsRow">
+      <button id="statsBtn" type="button"><span class="icon" data-icon="gear" data-icon-size="14"></span>集計を見る</button>
+      <button id="hoursBtn" type="button"><span class="icon" data-icon="gear" data-icon-size="14"></span>営業時間・休業日</button>
       <button id="coursesBtn" type="button"><span class="icon" data-icon="gear" data-icon-size="14"></span>コースの設定</button>
     </div>
 
@@ -504,6 +629,51 @@
       <div id="coursesMsg"></div>
     </div>
 
+    <div id="hoursCard">
+      <h2>営業時間・休業日の設定</h2>
+      <p style="font-size:13px;color:#777;margin:0 0 14px;">通常の営業時間帯(ランチ・ディナーなど中抜けがあれば複数指定)と、特定の日だけの臨時休業・時間変更・臨時営業を設定できます。</p>
+
+      <label style="margin-top:0;">通常の営業時間帯</label>
+      <div id="hoursPeriodsRows"></div>
+      <button id="hoursAddPeriodBtn" type="button"><span class="icon" data-icon="plus" data-icon-size="14"></span>時間帯を追加</button>
+
+      <label>特別な日(臨時休業・時間変更・臨時営業)</label>
+      <div id="hoursSpecialRows"></div>
+      <button id="hoursAddSpecialBtn" type="button"><span class="icon" data-icon="plus" data-icon-size="14"></span>特別な日を追加</button>
+
+      <div>
+        <button id="hoursSubmitBtn">この内容で保存する</button>
+        <button id="hoursCancelBtn">やめる</button>
+      </div>
+      <button id="hoursResetBtn" type="button">初期設定に戻す</button>
+      <div id="hoursMsg"></div>
+    </div>
+
+    <div id="statsCard">
+      <h2>集計</h2>
+      <div class="statsRangeRow">
+        <button type="button" class="statsPresetBtn" data-preset="thisMonth">今月</button>
+        <button type="button" class="statsPresetBtn" data-preset="lastMonth">先月</button>
+        <button type="button" class="statsPresetBtn" data-preset="last30">過去30日</button>
+      </div>
+      <div class="addRow2" style="margin-top:12px;">
+        <div>
+          <label>開始日</label>
+          <input type="date" id="statsFrom">
+        </div>
+        <div>
+          <label>終了日</label>
+          <input type="date" id="statsTo">
+        </div>
+      </div>
+      <div>
+        <button id="statsLoadBtn" type="button">この期間で集計する</button>
+        <button id="statsCancelBtn">閉じる</button>
+      </div>
+      <div id="statsMsg"></div>
+      <div id="statsResult" class="statsGrid" style="display:none;"></div>
+    </div>
+
     <div class="summary" id="summary"></div>
     <div id="listMsg"></div>
     <table id="table" style="display:none;">
@@ -583,6 +753,24 @@
       document.getElementById('coursesSubmitBtn').addEventListener('click', doSaveCourses);
       document.getElementById('coursesResetBtn').addEventListener('click', doResetCourses);
 
+      document.getElementById('hoursBtn').addEventListener('click', function () { toggleHoursForm(true); });
+      document.getElementById('hoursCancelBtn').addEventListener('click', function () { toggleHoursForm(false); });
+      document.getElementById('hoursAddPeriodBtn').addEventListener('click', function () {
+        document.getElementById('hoursPeriodsRows').appendChild(buildPeriodRow({ start: '', end: '' }));
+      });
+      document.getElementById('hoursAddSpecialBtn').addEventListener('click', function () {
+        document.getElementById('hoursSpecialRows').appendChild(buildSpecialRow({ date: '', closed: true }));
+      });
+      document.getElementById('hoursSubmitBtn').addEventListener('click', doSaveHours);
+      document.getElementById('hoursResetBtn').addEventListener('click', doResetHours);
+
+      document.getElementById('statsBtn').addEventListener('click', function () { toggleStatsForm(true); });
+      document.getElementById('statsCancelBtn').addEventListener('click', function () { toggleStatsForm(false); });
+      document.getElementById('statsLoadBtn').addEventListener('click', loadStats);
+      document.querySelectorAll('.statsPresetBtn').forEach(function (btn) {
+        btn.addEventListener('click', function () { applyStatsPreset(btn.dataset.preset); });
+      });
+
       google.script.run.withSuccessHandler(onAdminConfig).getConfig();
 
       if (TOKEN) {
@@ -604,13 +792,23 @@
       });
     }
 
+    /**
+     * 新規登録・変更・コース設定・営業時間設定・集計の各カードは同時に1つしか開かない。
+     * ある操作を開始する前に他をすべて閉じるための共通処理。
+     */
+    function hideExtraCards() {
+      document.getElementById('coursesCard').style.display = 'none';
+      document.getElementById('hoursCard').style.display = 'none';
+      document.getElementById('statsCard').style.display = 'none';
+    }
+
     // ---- 「変更する」「キャンセルする」の選択モード ----
     function setMode(mode) {
       MODE = mode;
       if (mode) {
         toggleAddForm(false);
         toggleEditForm(false);
-        document.getElementById('coursesCard').style.display = 'none';
+        hideExtraCards();
       }
 
       document.getElementById('editModeBtn').classList.toggle('active', mode === 'edit');
@@ -633,7 +831,7 @@
     }
 
     function toggleAddForm(show) {
-      if (show) { setMode(null); toggleEditForm(false); document.getElementById('coursesCard').style.display = 'none'; }
+      if (show) { setMode(null); toggleEditForm(false); hideExtraCards(); }
       document.getElementById('addCard').style.display = show ? 'block' : 'none';
       if (show) {
         document.getElementById('addDate').value = document.getElementById('targetDate').value;
@@ -652,7 +850,7 @@
     }
 
     function toggleEditForm(show, row) {
-      if (show) { setMode(null); toggleAddForm(false); document.getElementById('coursesCard').style.display = 'none'; }
+      if (show) { setMode(null); toggleAddForm(false); hideExtraCards(); }
       document.getElementById('editCard').style.display = show ? 'block' : 'none';
       if (show && row) {
         document.getElementById('editRowIndex').value = row.rowIndex;
@@ -767,7 +965,11 @@
     }
 
     function toggleCoursesForm(show) {
-      if (show) { setMode(null); toggleAddForm(false); toggleEditForm(false); }
+      if (show) {
+        setMode(null); toggleAddForm(false); toggleEditForm(false);
+        document.getElementById('hoursCard').style.display = 'none';
+        document.getElementById('statsCard').style.display = 'none';
+      }
       document.getElementById('coursesCard').style.display = show ? 'block' : 'none';
       if (show) {
         document.getElementById('coursesMsg').textContent = '';
@@ -902,6 +1104,338 @@
           document.getElementById('coursesMsg').textContent = 'エラー: ' + err.message;
         })
         .resetCoursesAdmin(TOKEN);
+    }
+
+    // ---- 営業時間・休業日の設定 ----
+    function toggleHoursForm(show) {
+      if (show) {
+        setMode(null); toggleAddForm(false); toggleEditForm(false);
+        document.getElementById('coursesCard').style.display = 'none';
+        document.getElementById('statsCard').style.display = 'none';
+      }
+      document.getElementById('hoursCard').style.display = show ? 'block' : 'none';
+      if (show) {
+        document.getElementById('hoursMsg').textContent = '';
+        document.getElementById('hoursPeriodsRows').innerHTML = '<div style="color:#888;font-size:13px;">読み込み中...</div>';
+        document.getElementById('hoursSpecialRows').innerHTML = '';
+        document.getElementById('hoursCard').scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        google.script.run
+          .withSuccessHandler(function (res) {
+            if (res.authError) {
+              doLogout();
+              document.getElementById('loginMsg').textContent = res.message;
+              return;
+            }
+            if (res.success) {
+              renderPeriodRows(res.settings.periods);
+              renderSpecialRows(res.settings.specialDays);
+            } else {
+              document.getElementById('hoursPeriodsRows').innerHTML = '';
+              document.getElementById('hoursMsg').textContent = res.message || '取得に失敗しました。';
+            }
+          })
+          .withFailureHandler(function (err) {
+            document.getElementById('hoursPeriodsRows').innerHTML = '';
+            document.getElementById('hoursMsg').textContent = 'エラー: ' + err.message;
+          })
+          .getBusinessHoursForAdmin(TOKEN);
+      }
+    }
+
+    function renderPeriodRows(periods) {
+      var wrap = document.getElementById('hoursPeriodsRows');
+      wrap.innerHTML = '';
+      (periods || []).forEach(function (p) { wrap.appendChild(buildPeriodRow(p)); });
+    }
+
+    function buildPeriodRow(period) {
+      var row = document.createElement('div');
+      row.className = 'periodRow';
+
+      var startInput = document.createElement('input');
+      startInput.type = 'time';
+      startInput.className = 'periodStart';
+      startInput.value = (period && period.start) || '';
+
+      var sep = document.createElement('span');
+      sep.className = 'periodSep';
+      sep.textContent = '〜';
+
+      var endInput = document.createElement('input');
+      endInput.type = 'time';
+      endInput.className = 'periodEnd';
+      endInput.value = (period && period.end) || '';
+
+      var removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'courseRemoveBtn';
+      removeBtn.textContent = '削除';
+      removeBtn.addEventListener('click', function () {
+        if (document.getElementById('hoursPeriodsRows').children.length <= 1) {
+          alert('営業時間帯は少なくとも1つ必要です。');
+          return;
+        }
+        row.remove();
+      });
+
+      row.appendChild(startInput);
+      row.appendChild(sep);
+      row.appendChild(endInput);
+      row.appendChild(removeBtn);
+      return row;
+    }
+
+    function collectPeriods() {
+      return Array.prototype.map.call(document.querySelectorAll('#hoursPeriodsRows .periodRow'), function (row) {
+        return {
+          start: row.querySelector('.periodStart').value,
+          end: row.querySelector('.periodEnd').value,
+        };
+      });
+    }
+
+    function renderSpecialRows(specialDays) {
+      var wrap = document.getElementById('hoursSpecialRows');
+      wrap.innerHTML = '';
+      (specialDays || []).forEach(function (d) { wrap.appendChild(buildSpecialRow(d)); });
+    }
+
+    function buildSpecialRow(special) {
+      var row = document.createElement('div');
+      row.className = 'specialRow';
+
+      var main = document.createElement('div');
+      main.className = 'specialRowMain';
+
+      var dateInput = document.createElement('input');
+      dateInput.type = 'date';
+      dateInput.className = 'specialDate';
+      dateInput.value = (special && special.date) || '';
+
+      var typeSelect = document.createElement('select');
+      typeSelect.className = 'specialType';
+      [
+        ['closed', '休業'],
+        ['hours', '時間変更で営業'],
+        ['open', '通常時間で臨時営業'],
+      ].forEach(function (opt) {
+        var o = document.createElement('option');
+        o.value = opt[0];
+        o.textContent = opt[1];
+        typeSelect.appendChild(o);
+      });
+      var initialType = 'open';
+      if (special && special.closed) {
+        initialType = 'closed';
+      } else if (special && Array.isArray(special.periods) && special.periods.length > 0) {
+        initialType = 'hours';
+      }
+      typeSelect.value = initialType;
+
+      var removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'courseRemoveBtn';
+      removeBtn.textContent = '削除';
+      removeBtn.addEventListener('click', function () { row.remove(); });
+
+      main.appendChild(dateInput);
+      main.appendChild(typeSelect);
+      main.appendChild(removeBtn);
+
+      var periodsWrap = document.createElement('div');
+      periodsWrap.className = 'specialPeriodsWrap';
+
+      var sp = (special && special.periods && special.periods[0]) || {};
+      var startInput = document.createElement('input');
+      startInput.type = 'time';
+      startInput.className = 'specialStart';
+      startInput.value = sp.start || '';
+      var sep = document.createElement('span');
+      sep.textContent = '〜';
+      var endInput = document.createElement('input');
+      endInput.type = 'time';
+      endInput.className = 'specialEnd';
+      endInput.value = sp.end || '';
+      periodsWrap.appendChild(startInput);
+      periodsWrap.appendChild(sep);
+      periodsWrap.appendChild(endInput);
+
+      var noteInput = document.createElement('input');
+      noteInput.type = 'text';
+      noteInput.className = 'specialNote';
+      noteInput.placeholder = 'メモ(任意。例: 年末休業)';
+      noteInput.value = (special && special.note) || '';
+
+      function updatePeriodsVisibility() {
+        periodsWrap.style.display = typeSelect.value === 'hours' ? 'flex' : 'none';
+      }
+      typeSelect.addEventListener('change', updatePeriodsVisibility);
+      updatePeriodsVisibility();
+
+      row.appendChild(main);
+      row.appendChild(periodsWrap);
+      row.appendChild(noteInput);
+      return row;
+    }
+
+    function collectSpecialDays() {
+      return Array.prototype.map.call(document.querySelectorAll('#hoursSpecialRows .specialRow'), function (row) {
+        var date = row.querySelector('.specialDate').value;
+        var type = row.querySelector('.specialType').value;
+        var note = row.querySelector('.specialNote').value.trim();
+        var entry = { date: date, closed: type === 'closed', note: note };
+        if (type === 'hours') {
+          entry.periods = [{
+            start: row.querySelector('.specialStart').value,
+            end: row.querySelector('.specialEnd').value,
+          }];
+        }
+        return entry;
+      });
+    }
+
+    function doSaveHours() {
+      var settings = { periods: collectPeriods(), specialDays: collectSpecialDays() };
+      var btn = document.getElementById('hoursSubmitBtn');
+      btn.disabled = true;
+      btn.textContent = '保存中...';
+
+      google.script.run
+        .withSuccessHandler(function (res) {
+          btn.disabled = false;
+          btn.textContent = 'この内容で保存する';
+          if (res.authError) {
+            doLogout();
+            document.getElementById('loginMsg').textContent = res.message;
+            return;
+          }
+          if (res.success) {
+            toggleHoursForm(false);
+          } else {
+            document.getElementById('hoursMsg').textContent = res.message;
+          }
+        })
+        .withFailureHandler(function (err) {
+          btn.disabled = false;
+          btn.textContent = 'この内容で保存する';
+          document.getElementById('hoursMsg').textContent = 'エラー: ' + err.message;
+        })
+        .updateBusinessHoursAdmin(TOKEN, settings);
+    }
+
+    function doResetHours() {
+      if (!confirm('営業時間・休業日設定を初期状態に戻します。よろしいですか?')) return;
+
+      google.script.run
+        .withSuccessHandler(function (res) {
+          if (res.authError) {
+            doLogout();
+            document.getElementById('loginMsg').textContent = res.message;
+            return;
+          }
+          if (res.success) {
+            renderPeriodRows(res.settings.periods);
+            renderSpecialRows(res.settings.specialDays);
+            document.getElementById('hoursMsg').textContent = '';
+          } else {
+            document.getElementById('hoursMsg').textContent = res.message;
+          }
+        })
+        .withFailureHandler(function (err) {
+          document.getElementById('hoursMsg').textContent = 'エラー: ' + err.message;
+        })
+        .resetBusinessHoursAdmin(TOKEN);
+    }
+
+    // ---- 集計 ----
+    function toggleStatsForm(show) {
+      if (show) {
+        setMode(null); toggleAddForm(false); toggleEditForm(false);
+        document.getElementById('coursesCard').style.display = 'none';
+        document.getElementById('hoursCard').style.display = 'none';
+      }
+      document.getElementById('statsCard').style.display = show ? 'block' : 'none';
+      if (show) {
+        document.getElementById('statsMsg').textContent = '';
+        document.getElementById('statsResult').style.display = 'none';
+        document.getElementById('statsCard').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if (!document.getElementById('statsFrom').value) {
+          applyStatsPreset('thisMonth');
+        }
+      }
+    }
+
+    function setStatsPresetActive(preset) {
+      document.querySelectorAll('.statsPresetBtn').forEach(function (btn) {
+        btn.classList.toggle('active', btn.dataset.preset === preset);
+      });
+    }
+
+    function applyStatsPreset(preset) {
+      setStatsPresetActive(preset);
+      var now = new Date();
+      var from, to;
+      if (preset === 'thisMonth') {
+        from = new Date(now.getFullYear(), now.getMonth(), 1);
+        to = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      } else if (preset === 'lastMonth') {
+        from = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        to = new Date(now.getFullYear(), now.getMonth(), 0);
+      } else {
+        to = now;
+        from = new Date(now.getTime() - 29 * 24 * 60 * 60 * 1000);
+      }
+      document.getElementById('statsFrom').value = toDateStr(from);
+      document.getElementById('statsTo').value = toDateStr(to);
+      loadStats();
+    }
+
+    function loadStats() {
+      var from = document.getElementById('statsFrom').value;
+      var to = document.getElementById('statsTo').value;
+      if (!TOKEN || !from || !to) return;
+
+      document.getElementById('statsMsg').textContent = '集計中...';
+      document.getElementById('statsResult').style.display = 'none';
+
+      google.script.run
+        .withSuccessHandler(function (res) {
+          if (res.authError) {
+            doLogout();
+            document.getElementById('loginMsg').textContent = res.message;
+            return;
+          }
+          if (!res.success) {
+            document.getElementById('statsMsg').textContent = res.message || '取得に失敗しました。';
+            return;
+          }
+          document.getElementById('statsMsg').textContent = '';
+          renderStats(res);
+        })
+        .withFailureHandler(function (err) {
+          document.getElementById('statsMsg').textContent = 'エラー: ' + err.message;
+        })
+        .getStatsForAdmin(TOKEN, from, to);
+    }
+
+    function renderStats(res) {
+      var wrap = document.getElementById('statsResult');
+      wrap.style.display = 'grid';
+      wrap.innerHTML = '';
+      [
+        { num: res.confirmedCount + '組', label: '予約組数' },
+        { num: res.confirmedPeople + '名', label: '総人数' },
+        { num: res.cancelledCount + '件', label: 'キャンセル数' },
+        { num: (Math.round(res.cancelRate * 1000) / 10) + '%', label: 'キャンセル率' },
+        { num: (Math.round(res.avgPartySize * 10) / 10) + '名', label: '1組あたり平均人数' },
+        { num: res.waitlistCount + '件', label: 'キャンセル待ち(参考)' },
+      ].forEach(function (t) {
+        var tile = document.createElement('div');
+        tile.className = 'statTile';
+        tile.innerHTML = '<div class="num">' + escapeHtml(t.num) + '</div><div class="label">' + escapeHtml(t.label) + '</div>';
+        wrap.appendChild(tile);
+      });
     }
 
     function doLogin() {
