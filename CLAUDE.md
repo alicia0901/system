@@ -37,16 +37,22 @@ clasp 初回セットアップ(運用担当者アカウントで1回のみ): `np
 ### 予約処理のフロー(`gas/Code.gs`)
 
 1. `doGet(e)` — `?page=admin` の有無で `index.html`(予約フォーム)か `admin.html`(管理画面)を出し分けるエントリポイント。
-2. `getDaySchedule(dateStr)` — 指定日の確定予約(`getConfirmedRangesForDate`、`STATUS_CONFIRMED` のみ集計)を集計し、時間帯ごとの空席状況をフォームに返す。
-3. `submitBooking(form)` — 予約確定処理。フラッド対策(`checkGlobalFloodGuard`)→ 必須項目・人数上限 → 同一電話番号の連投対策(`checkPhoneRateLimit`)→ 過去日時/予約可能期間 → 定休日 → 営業時間内(コース滞在時間込み) → 座席数超過(`sumOverlappingPartySize` で時間帯の重複人数を合算し `SEATS_TOTAL` と比較)の順にチェックする。満席時は `CONFIG.WAITLIST_ENABLED` かつ `form.acceptWaitlist` なら `STATUS_WAITLIST` で登録(カレンダー登録なし)、それ以外は拒否。通過すればカレンダー登録・スプレッドシート追記・メール送信(`sendBookingEmails`)を行う。
+2. `getDaySchedule(dateStr)` — 指定日の確定予約(`getConfirmedRangesForDate`、`STATUS_CONFIRMED` のみ集計)と、`getBusinessHoursForDate(dateStr)` による営業時間帯を集計し、時間帯ごとの空席状況をフォームに返す。
+3. `submitBooking(form)` — 予約確定処理。フラッド対策(`checkGlobalFloodGuard`)→ 必須項目・人数上限 → 同一電話番号の連投対策(`checkPhoneRateLimit`)→ 過去日時/予約可能期間 → 休業日・営業時間内(コース滞在時間込み、`getBusinessHoursForDate`+`isWithinBusinessPeriods`) → 座席数超過(`sumOverlappingPartySize` で時間帯の重複人数を合算し `SEATS_TOTAL` と比較)の順にチェックする。満席時は `CONFIG.WAITLIST_ENABLED` かつ `form.acceptWaitlist` なら `STATUS_WAITLIST` で登録(カレンダー登録なし)、それ以外は拒否。通過すればカレンダー登録・スプレッドシート追記・メール送信(`sendBookingEmails`)を行う。
 4. 管理画面側は `adminLogin` → `isValidAdminToken` によるパスワード認証(単純な共有パスワード方式)の上で以下を呼ぶ:
-   - `getReservationsForAdmin` / `cancelReservationAdmin` — 一覧取得・キャンセル(キャンセル待ちの取り消しにも使う)。
-   - `createReservationAdmin` — 電話予約などの手動登録。オンラインフォームと違いメール任意。`force: true` で定休日・営業時間外・満席チェックを無視できる(通知メールは店舗へは送らずお客様宛のみ)。
-   - `updateReservationAdmin` — 既存予約(キャンセル済み以外)の内容変更。ステータスは変更しない。空席チェックは `getConfirmedRangesForDate(dateStr, excludeRowIndex)` で変更対象自身の現在の枠を除外した上で行う(自分自身との重複で誤って満席判定にならないようにするため)。`force: true` で定休日・営業時間外・満席チェックを無視できる(満席時間帯への変更用)。確定済み(`STATUS_CONFIRMED`)予約はカレンダーの予定も `setTime`/`setTitle`/`setDescription` で追随して更新する。
+   - `getReservationsForAdmin` / `cancelReservationAdmin` — 一覧取得・キャンセル(キャンセル待ちの取り消しにも使う)。`cancelReservationAdmin` は確定予約のキャンセル時に `notifyWaitlistOfOpening(dateStr)` を呼び、その日のキャンセル待ちへ空席通知を試みる。
+   - `createReservationAdmin` — 電話予約などの手動登録。オンラインフォームと違いメール任意。`force: true` で休業日・営業時間外・満席チェックを無視できる(通知メールは店舗へは送らずお客様宛のみ)。
+   - `updateReservationAdmin` — 既存予約(キャンセル済み以外)の内容変更。ステータスは変更しない。空席チェックは `getConfirmedRangesForDate(dateStr, excludeRowIndex)` で変更対象自身の現在の枠を除外した上で行う(自分自身との重複で誤って満席判定にならないようにするため)。`force: true` で休業日・営業時間外・満席チェックを無視できる(満席時間帯への変更用)。確定済み(`STATUS_CONFIRMED`)予約はカレンダーの予定も `setTime`/`setTitle`/`setDescription` で追随して更新する。変更前の日付・人数・コースと比べて座席に空きが出る可能性がある変更(日付変更・人数減・滞在時間短縮)なら、変更前の日付について `notifyWaitlistOfOpening` を呼ぶ。
    - `promoteWaitlistAdmin` — キャンセル待ち(`STATUS_WAITLIST`)をその時点の空席状況を再確認した上で確定(`STATUS_CONFIRMED`)へ繰り上げ、この時点で初めてカレンダー登録する。
    - `getCoursesForAdmin` / `updateCoursesAdmin` / `resetCoursesAdmin` — コース(名前・滞在時間)の一覧取得・変更・初期化。**コース設定は `CONFIG.COURSES` ではなく `PropertiesService.getScriptProperties()`(キー `COURSES_OVERRIDE`, JSON文字列)に保存される**。`getEffectiveCourses()` がこのプロパティがあればそれを、なければ `CONFIG.COURSES` を返す共通の読み出し口になっており、コース一覧を参照する箇所(`getConfig`・`submitBooking`・`createReservationAdmin`・`updateReservationAdmin`・`promoteWaitlistAdmin`・`getConfirmedRangesForDate`)はすべて `CONFIG.COURSES` ではなく `getEffectiveCourses()` を使う。これにより、管理画面からのコース変更は `setup/create-store.js` によるコード再生成(CONFIG ブロックの差し替え)や `gas/Code.gs` への機能追加の影響を受けない。新しくコース一覧を参照するコードを書く場合は `CONFIG.COURSES` を直接参照しないこと。
+   - `getBusinessHoursForAdmin` / `updateBusinessHoursAdmin` / `resetBusinessHoursAdmin` — 営業時間帯(中抜け対応の複数帯)・特別な日(臨時休業/時間変更/臨時営業)の取得・変更・初期化。コース設定と同じパターンで、**実運用値は `CONFIG.CLOSED_WEEKDAYS`/`BUSINESS_START_HOUR`/`BUSINESS_END_HOUR`/`BUSINESS_PERIODS` ではなく `PropertiesService`(キー `BUSINESS_HOURS_OVERRIDE`, JSON文字列)に保存**され、`getBusinessSettings()` が読み出し口。指定日の営業状況(休業か・どの時間帯か)を判定する処理は必ず `getBusinessHoursForDate(dateStr)` を経由すること(`CLOSED_WEEKDAYS`/`BUSINESS_START_HOUR`/`BUSINESS_END_HOUR` を新しいコードで直接参照しない)。保存時、過去日の `specialDays` は自動的に取り除かれる。
+   - `getStatsForAdmin(token, fromDate, toDate)` — 期間内の予約組数・総人数・キャンセル数/率・1組あたり平均人数・キャンセル待ち件数を返す(シートの全走査、最大1年)。
 
 **座席管理はテーブル単位ではなく総座席数ベース**: 各予約はコースの `duration`(滞在時間)分だけ `SEATS_TOTAL` を占有するとみなし、重なる時間帯の人数合計で空席を判定する(テーブル数・席種を分けた最適化は行わない設計)。
+
+### キャンセル待ちへの空席通知
+
+`notifyWaitlistOfOpening(dateStr)` は座席に空きが出た可能性がある操作(確定予約のキャンセル、または人数減・日付変更・滞在時間短縮を伴う変更)の後に呼ばれ、その日の `STATUS_WAITLIST` のうち現在の空席状況なら収まるものへ「空きが出ました」メールを送る。**ステータスは変更しない**(確定は引き続き管理画面の `promoteWaitlistAdmin` で行う、客の意思確認なしに席を押さえないため)。二重送信防止は `SHEET_HEADERS`/`COL` 末尾の `WAITLIST_NOTIFIED` 列(通知日時)で行い、一度通知した予約には二度と送らない(再度満席になって再び空いても再送しない)。1回の呼び出しで通知する件数は `WAITLIST_NOTIFY_MAX_PER_RUN`(登録順の先着)に絞る。
 
 ### LINEアプリ内予約(LIFF)
 

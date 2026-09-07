@@ -85,6 +85,7 @@ const configBlock = `const CONFIG = {
   BUSINESS_START_HOUR: ${Number.isFinite(cfg.businessStartHour) ? cfg.businessStartHour : 11},
   BUSINESS_END_HOUR: ${Number.isFinite(cfg.businessEndHour) ? cfg.businessEndHour : 22},
   CLOSED_WEEKDAYS: ${JSON.stringify(cfg.closedWeekdays || [1])},
+  BUSINESS_PERIODS: ${JSON.stringify(cfg.businessPeriods || [])},
   SLOT_MINUTES: ${Number.isFinite(cfg.slotMinutes) ? cfg.slotMinutes : 30},
   MAX_DAYS_AHEAD: ${Number.isFinite(cfg.maxDaysAhead) ? cfg.maxDaysAhead : 60},
   SEATS_TOTAL: ${Number.isFinite(cfg.seatsTotal) ? cfg.seatsTotal : 20},

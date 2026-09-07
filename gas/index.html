@@ -711,15 +711,12 @@
       grid.innerHTML = '';
 
       if (schedule.closed) {
-        hint.textContent = 'この日は定休日です。別の日をお選びください。';
+        hint.textContent = 'この日は休業日です。別の日をお選びください。' + (schedule.note ? '(' + schedule.note + ')' : '');
         return;
       }
 
       var courseDef = CFG.courses.filter(function (c) { return c.name === courseName; })[0];
       var duration = courseDef ? courseDef.duration : CFG.slotMinutes;
-
-      var startMin = CFG.businessStartHour * 60;
-      var endMin = CFG.businessEndHour * 60;
       var slot = CFG.slotMinutes;
 
       var now = new Date();
@@ -727,39 +724,43 @@
       var nowMin = now.getHours() * 60 + now.getMinutes();
 
       var any = false;
-      for (var t = startMin; t + duration <= endMin; t += slot) {
-        var label = pad(Math.floor(t / 60)) + ':' + pad(t % 60);
+      (schedule.periods || []).forEach(function (period) {
+        for (var t = period.startMin; t + duration <= period.endMin; t += slot) {
+          var label = pad(Math.floor(t / 60)) + ':' + pad(t % 60);
 
-        var reservedAtSlot = schedule.bookedRanges.reduce(function (sum, r) {
-          var overlaps = t < r.endMin && (t + duration) > r.startMin;
-          return overlaps ? sum + r.partySize : sum;
-        }, 0);
-        var remaining = CFG.seatsTotal - reservedAtSlot;
-        var isFull = remaining < partySize;
-        var isPast = isToday && t <= nowMin;
-        var isWaitlistable = isFull && !isPast && CFG.waitlistEnabled;
-        var isSelectable = !isPast && (!isFull || isWaitlistable);
+          var reservedAtSlot = schedule.bookedRanges.reduce(function (sum, r) {
+            var overlaps = t < r.endMin && (t + duration) > r.startMin;
+            return overlaps ? sum + r.partySize : sum;
+          }, 0);
+          var remaining = CFG.seatsTotal - reservedAtSlot;
+          var isFull = remaining < partySize;
+          var isPast = isToday && t <= nowMin;
+          var isWaitlistable = isFull && !isPast && CFG.waitlistEnabled;
+          var isSelectable = !isPast && (!isFull || isWaitlistable);
 
-        var btn = document.createElement('div');
-        btn.className = 'time-btn' + (!isSelectable ? ' disabled' : (isWaitlistable ? ' full-waitlist' : ''));
-        btn.textContent = label + (isWaitlistable ? '(待)' : '');
-        btn.dataset.time = label;
-        if (isSelectable) {
-          btn.title = isFull ? '満席・キャンセル待ちで登録できます' : '残り約' + remaining + '席';
-          any = true;
-          btn.addEventListener('click', function () {
-            var els = grid.querySelectorAll('.time-btn');
-            els.forEach(function (e) { e.classList.remove('selected'); });
-            this.classList.add('selected');
-            selectedTime = this.dataset.time;
-            selectedIsWaitlist = this.classList.contains('full-waitlist');
-            document.getElementById('time').value = selectedTime;
-            updateSubmitUi();
-          });
+          var btn = document.createElement('div');
+          btn.className = 'time-btn' + (!isSelectable ? ' disabled' : (isWaitlistable ? ' full-waitlist' : ''));
+          btn.textContent = label + (isWaitlistable ? '(待)' : '');
+          btn.dataset.time = label;
+          if (isSelectable) {
+            btn.title = isFull ? '満席・キャンセル待ちで登録できます' : '残り約' + remaining + '席';
+            any = true;
+            btn.addEventListener('click', function () {
+              var els = grid.querySelectorAll('.time-btn');
+              els.forEach(function (e) { e.classList.remove('selected'); });
+              this.classList.add('selected');
+              selectedTime = this.dataset.time;
+              selectedIsWaitlist = this.classList.contains('full-waitlist');
+              document.getElementById('time').value = selectedTime;
+              updateSubmitUi();
+            });
+          }
+          grid.appendChild(btn);
         }
-        grid.appendChild(btn);
-      }
-      hint.textContent = any ? '空き時間をタップして選択してください((待)は満席のためキャンセル待ちになります)' : 'この日・この人数では空きがありません。別の日時をお選びください。';
+      });
+      hint.textContent = any
+        ? '空き時間をタップして選択してください((待)は満席のためキャンセル待ちになります)' + (schedule.note ? '(' + schedule.note + ')' : '')
+        : 'この日・この人数では空きがありません。別の日時をお選びください。';
     }
 
     function updateSubmitUi() {
