@@ -102,16 +102,23 @@
     text-align: center;
     padding: 100px 24px 80px;
     overflow: hidden;
-    background: var(--ground);
+    background: #100b08 url("images/hero-bg.jpg") center 30% / cover no-repeat;
+    /* 背景写真の上でも文字が読めるよう、ヒーロー内だけ常に明るい配色に固定 */
+    --ink: #fff9f2;
+    --ink-soft: #f2e2cf;
+    --muted: #e4cfb4;
+    --gold: #ffcf7a;
+    --lantern-strong: #ff7a4d;
   }
   .hero::before {
     content: "";
     position: absolute;
     inset: 0;
     background:
-      radial-gradient(ellipse 60% 50% at 50% 4%, color-mix(in srgb, var(--lantern) 34%, transparent), transparent 70%),
-      radial-gradient(ellipse 45% 40% at 12% 88%, color-mix(in srgb, var(--gold) 24%, transparent), transparent 70%),
-      radial-gradient(ellipse 45% 40% at 90% 82%, color-mix(in srgb, var(--lantern) 20%, transparent), transparent 70%);
+      linear-gradient(180deg, rgba(12, 7, 5, 0.55), rgba(12, 7, 5, 0.72) 55%, rgba(12, 7, 5, 0.85)),
+      radial-gradient(ellipse 60% 50% at 50% 4%, color-mix(in srgb, var(--lantern) 30%, transparent), transparent 70%),
+      radial-gradient(ellipse 45% 40% at 12% 88%, color-mix(in srgb, var(--gold) 16%, transparent), transparent 70%),
+      radial-gradient(ellipse 45% 40% at 90% 82%, color-mix(in srgb, var(--lantern) 18%, transparent), transparent 70%);
     pointer-events: none;
   }
   .hero::after {
@@ -343,6 +350,7 @@
 
 <div class="note">
   これはサンプルです。店名・キャッチコピー・住所・電話番号・営業時間と、下記の予約ボタンのリンク先(<code>RESERVATION_URL</code>)を、実際の内容に差し替えてご利用ください。
+  背景写真(<code>images/hero-bg.jpg</code>)もフリー素材のダミーです。実店舗で使う際は、お店の実際の写真に差し替えてください。
 </div>
 
 <section class="hero">
