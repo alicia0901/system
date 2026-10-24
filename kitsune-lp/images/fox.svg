@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <!-- 仮のキツネアイコン。提供いただいたキツネのイラストに差し替えてください(同じファイル名で上書きでOK) -->
+  <defs>
+    <linearGradient id="fur" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5aa2ff"/>
+      <stop offset="1" stop-color="#1f5fe0"/>
+    </linearGradient>
+    <linearGradient id="ear" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3f86ff"/>
+      <stop offset="1" stop-color="#1a4fc2"/>
+    </linearGradient>
+  </defs>
+  <polygon points="36,16 86,68 38,96" fill="url(#ear)"/>
+  <polygon points="164,16 114,68 162,96" fill="url(#ear)"/>
+  <polygon points="46,36 74,68 48,84" fill="#0d1b38"/>
+  <polygon points="154,36 126,68 152,84" fill="#0d1b38"/>
+  <polygon points="38,72 100,58 162,72 180,112 100,182 20,112" fill="url(#fur)"/>
+  <polygon points="100,58 162,72 180,112 100,182" fill="#000" opacity=".12"/>
+  <polygon points="20,112 70,120 100,182" fill="#f2f7ff"/>
+  <polygon points="180,112 130,120 100,182" fill="#dde8fb"/>
+  <polygon points="100,64 112,94 100,108 88,94" fill="#7fd4ff" opacity=".9"/>
+  <polygon points="58,106 88,112 80,122" fill="#081226"/>
+  <polygon points="142,106 112,112 120,122" fill="#081226"/>
+  <polygon points="66,110 80,113 77,117" fill="#7fd4ff"/>
+  <polygon points="134,110 120,113 123,117" fill="#7fd4ff"/>
+  <polygon points="91,164 109,164 100,177" fill="#081226"/>
+</svg>
