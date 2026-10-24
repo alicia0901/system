@@ -52,8 +52,9 @@ if (!/^[a-zA-Z0-9_-]+$/.test(cfg.storeSlug)) {
 if (!Array.isArray(cfg.courses) || cfg.courses.length === 0) {
   fail('courses は1件以上の配列で指定してください');
 }
-if (cfg.adminPassword === 'changeme') {
-  console.warn('⚠ adminPassword が初期値の "changeme" のままです。必ず変更してください。');
+// gas/Code.gs の adminLogin も同じ条件でログインを拒否する(ADMIN_PASSWORD_MIN_LENGTH)
+if (cfg.adminPassword === 'changeme' || String(cfg.adminPassword).length < 10) {
+  fail('adminPassword が初期値の "changeme" のままか、10文字未満です。10文字以上の推測されにくいパスワードに変更してください');
 }
 
 // ---- パス ----
