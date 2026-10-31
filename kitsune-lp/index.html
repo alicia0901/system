@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- ============================================================
+     Apex Legends コーチング「キツネ」 LP
+     ※文章・料金・実績・XのURLなどは js/content.js で一括管理しています。
+       日常の更新は content.js と images/ フォルダだけで完結します(README.md 参照)。
+     ※下の <title> / description / OGP は検索結果・Xのカード表示に使われるため、
+       ここだけは HTML に直接書いています(公開URL確定後に og:url 等を差し替え)。
+     ============================================================ -->
+<title>Apex Legends コーチング「キツネ」｜Predator到達コーチによるランクアップ指導</title>
+<meta name="description" content="Predator到達コーチによるApex Legendsのマンツーマンコーチング「キツネ」。プレイ動画の分析と実戦指導で、立ち回り・エイム・判断力を改善し、ランクアップを目指します。Xのダイレクトメッセージから気軽にご相談ください。">
+<meta name="theme-color" content="#081226">
+<link rel="canonical" href="https://example.com/">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Apex Legends コーチング キツネ">
+<meta property="og:title" content="Apex Legends コーチング「キツネ」｜Predator到達コーチが直接指導">
+<meta property="og:description" content="立ち回り・エイム・判断力をPredatorの視点で分析。ランクアップを目指すプレイヤーのためのマンツーマンコーチング。">
+<meta property="og:url" content="https://example.com/">
+<meta property="og:image" content="https://example.com/images/ogp.png">
+<meta name="twitter:card" content="summary_large_image">
+
+<link rel="icon" href="images/fox.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="site-header" id="top">
+  <div class="container header-inner">
+    <a class="brand" href="#top" aria-label="キツネ トップへ">
+      <img src="images/fox.svg" alt="" width="36" height="36">
+      <span class="brand-text"><span class="brand-en" data-bind="brand.en"></span><span class="brand-ja" data-bind="brand.ja"></span></span>
+    </a>
+    <nav class="global-nav" aria-label="ページ内メニュー">
+      <a href="#coach">コーチ紹介</a>
+      <a href="#results">実績</a>
+      <a href="#plans">料金</a>
+      <a href="#flow">ご利用の流れ</a>
+      <a href="#faq">よくある質問</a>
+    </nav>
+    <a class="btn btn-x btn-sm js-dm" href="#" target="_blank" rel="noopener">
+      <svg class="x-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+      <span>DMで相談</span>
+    </a>
+  </div>
+</header>
+
+<main>
+  <!-- 1. ファーストビュー -->
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="hero-bg" aria-hidden="true"></div>
+    <div class="container hero-inner">
+      <div class="hero-copy">
+        <p class="eyebrow" data-bind="hero.eyebrow"></p>
+        <h1 id="hero-title" class="hero-title" data-bind-html="hero.title"></h1>
+        <p class="hero-lead" data-bind="hero.lead"></p>
+        <div class="hero-cta">
+          <a class="btn btn-primary btn-lg js-dm" href="#" target="_blank" rel="noopener">
+            <svg class="x-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+            <span data-bind="cta.primary"></span>
+          </a>
+          <a class="btn btn-ghost btn-lg" href="#plans">料金プランを見る</a>
+        </div>
+        <p class="hero-note" data-bind="cta.note"></p>
+      </div>
+      <div class="hero-visual" aria-hidden="true">
+        <div class="hero-ring"></div>
+        <img class="hero-fox" src="images/fox.svg" alt="" width="420" height="420">
+        <div class="hero-badge"><span class="hero-badge-label">COACH RANK</span><span class="hero-badge-value" data-bind="coach.rankBadge"></span></div>
+      </div>
+    </div>
+    <div class="container">
+      <ul class="stats" data-list="stats"></ul>
+    </div>
+  </section>
+
+  <!-- サービスの特徴 -->
+  <section class="section" id="features" aria-labelledby="features-title">
+    <div class="container">
+      <div class="section-head">
+        <p class="section-en">FEATURES</p>
+        <h2 id="features-title" class="section-title">キツネのコーチングが選ばれる理由</h2>
+      </div>
+      <ol class="features" data-list="features"></ol>
+    </div>
+  </section>
+
+  <!-- 2. コーチのプロフィール・Predator到達実績 -->
+  <section class="section section-alt" id="coach" aria-labelledby="coach-title">
+    <div class="container">
+      <div class="section-head">
+        <p class="section-en">COACH</p>
+        <h2 id="coach-title" class="section-title">コーチ紹介</h2>
+      </div>
+      <div class="coach">
+        <figure class="coach-photo">
+          <img data-bind-src="coach.image" alt="" width="480" height="480" loading="lazy">
+        </figure>
+        <div class="coach-body">
+          <p class="coach-role" data-bind="coach.role"></p>
+          <h3 class="coach-name" data-bind="coach.name"></h3>
+          <p class="coach-bio" data-bind="coach.bio"></p>
+          <h4 class="coach-sub">主な実績</h4>
+          <ul class="achievements" data-list="coach.achievements"></ul>
+          <a class="coach-link js-profile" href="#" target="_blank" rel="noopener">Xのプロフィールを見る →</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. 受講者のランクアップ実績・感想 -->
+  <section class="section" id="results" aria-labelledby="results-title">
+    <div class="container">
+      <div class="section-head">
+        <p class="section-en">RESULTS</p>
+        <h2 id="results-title" class="section-title">受講者のランクアップ実績</h2>
+        <p class="section-lead" data-bind="resultsLead"></p>
+      </div>
+      <ul class="results" data-list="results"></ul>
+
+      <div class="section-head section-head-sub">
+        <p class="section-en">VOICES</p>
+        <h2 class="section-title">受講者の声</h2>
+      </div>
+      <ul class="voices" data-list="voices"></ul>
+    </div>
+  </section>
+
+  <!-- 4. 料金プラン -->
+  <section class="section section-alt" id="plans" aria-labelledby="plans-title">
+    <div class="container">
+      <div class="section-head">
+        <p class="section-en">PRICE</p>
+        <h2 id="plans-title" class="section-title">料金プラン</h2>
+        <p class="section-lead" data-bind="plansLead"></p>
+      </div>
+      <ul class="plans" data-list="plans"></ul>
+      <p class="plans-note" data-bind="plansNote"></p>
+    </div>
+  </section>
+
+  <!-- 5. ご利用の流れ -->
+  <section class="section" id="flow" aria-labelledby="flow-title">
+    <div class="container">
+      <div class="section-head">
+        <p class="section-en">FLOW</p>
+        <h2 id="flow-title" class="section-title">ご利用の流れ</h2>
+      </div>
+      <ol class="flow" data-list="flow"></ol>
+    </div>
+  </section>
+
+  <!-- 5. よくある質問 -->
+  <section class="section section-alt" id="faq" aria-labelledby="faq-title">
+    <div class="container container-narrow">
+      <div class="section-head">
+        <p class="section-en">FAQ</p>
+        <h2 id="faq-title" class="section-title">よくある質問</h2>
+      </div>
+      <div class="faq" data-list="faq"></div>
+    </div>
+  </section>
+
+  <!-- 6. Xのダイレクトメッセージへの問い合わせ -->
+  <section class="cta-final" aria-labelledby="cta-title">
+    <div class="container cta-final-inner">
+      <img class="cta-fox" src="images/fox.svg" alt="" width="120" height="120" loading="lazy">
+      <h2 id="cta-title" class="cta-title" data-bind-html="cta.finalTitle"></h2>
+      <p class="cta-text" data-bind="cta.finalText"></p>
+      <a class="btn btn-primary btn-lg js-dm" href="#" target="_blank" rel="noopener">
+        <svg class="x-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+        <span data-bind="cta.primary"></span>
+      </a>
+      <p class="hero-note" data-bind="cta.note"></p>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="container footer-inner">
+    <p class="footer-brand"><img src="images/fox.svg" alt="" width="28" height="28"><span data-bind="brand.en"></span></p>
+    <p class="footer-disclaimer" data-bind="footer.disclaimer"></p>
+    <p class="footer-copy">&copy; <span class="js-year"></span> <span data-bind="footer.copyright"></span></p>
+  </div>
+</footer>
+
+<!-- スマホ用:画面下に常に表示される問い合わせボタン -->
+<div class="sticky-cta" aria-hidden="false">
+  <a class="btn btn-primary js-dm" href="#" target="_blank" rel="noopener">
+    <svg class="x-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+    <span data-bind="cta.primary"></span>
+  </a>
+</div>
+
+<noscript><p class="noscript">このページを表示するにはJavaScriptを有効にしてください。</p></noscript>
+
+<script src="js/content.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

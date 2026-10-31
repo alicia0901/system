@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 480">
+  <!-- 仮のコーチ画像。コーチのアイコン・写真・キャラクター画像に差し替えてください -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#142650"/>
+      <stop offset="1" stop-color="#050b1a"/>
+    </linearGradient>
+    <radialGradient id="glow" cx=".5" cy=".45" r=".5">
+      <stop offset="0" stop-color="#2f7bff" stop-opacity=".5"/>
+      <stop offset="1" stop-color="#2f7bff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="480" height="480" fill="url(#bg)"/>
+  <rect width="480" height="480" fill="url(#glow)"/>
+  <g stroke="#7faaff" stroke-opacity=".08">
+    <path d="M0 80H480M0 160H480M0 240H480M0 320H480M0 400H480M80 0V480M160 0V480M240 0V480M320 0V480M400 0V480"/>
+  </g>
+  <svg x="100" y="80" width="280" height="280" viewBox="0 0 200 200">
+  
+  <defs>
+    <linearGradient id="fur" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5aa2ff"/>
+      <stop offset="1" stop-color="#1f5fe0"/>
+    </linearGradient>
+    <linearGradient id="ear" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3f86ff"/>
+      <stop offset="1" stop-color="#1a4fc2"/>
+    </linearGradient>
+  </defs>
+  <polygon points="36,16 86,68 38,96" fill="url(#ear)"/>
+  <polygon points="164,16 114,68 162,96" fill="url(#ear)"/>
+  <polygon points="46,36 74,68 48,84" fill="#0d1b38"/>
+  <polygon points="154,36 126,68 152,84" fill="#0d1b38"/>
+  <polygon points="38,72 100,58 162,72 180,112 100,182 20,112" fill="url(#fur)"/>
+  <polygon points="100,58 162,72 180,112 100,182" fill="#000" opacity=".12"/>
+  <polygon points="20,112 70,120 100,182" fill="#f2f7ff"/>
+  <polygon points="180,112 130,120 100,182" fill="#dde8fb"/>
+  <polygon points="100,64 112,94 100,108 88,94" fill="#7fd4ff" opacity=".9"/>
+  <polygon points="58,106 88,112 80,122" fill="#081226"/>
+  <polygon points="142,106 112,112 120,122" fill="#081226"/>
+  <polygon points="66,110 80,113 77,117" fill="#7fd4ff"/>
+  <polygon points="134,110 120,113 123,117" fill="#7fd4ff"/>
+  <polygon points="91,164 109,164 100,177" fill="#081226"/>
+</svg>
+  <text x="240" y="420" fill="#7d8db0" font-family="sans-serif" font-size="18" letter-spacing="6" text-anchor="middle">COACH IMAGE</text>
+</svg>
