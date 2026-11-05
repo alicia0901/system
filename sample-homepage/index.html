@@ -4,60 +4,65 @@
 <meta charset="utf-8">
 <title>サンプル食堂</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="仕事帰りにふらっと寄れる大衆酒場、サンプル食堂。炭火の串焼きと旬の肴、よく冷えた生ビールでお待ちしています。オンライン予約24時間受付中。">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Yuji+Syuku&family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Yuji+Syuku&family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
 <style>
   /* ============================================================
-     サンプル食堂 ホームページ(カジュアル居酒屋スタイル)
+     サンプル食堂 ホームページ(大衆酒場スタイル)
      ※このファイルはサンプルです。店名・住所・電話番号・営業時間・
-       予約フォームのURL(RESERVATION_URL)を実際の内容に差し替えてください。
+       おしながき・予約フォームのURL(RESERVATION_URL)を
+       実際の内容に差し替えてください。
      ============================================================ */
 
   :root {
-    --ground: #f7ede0;
-    --surface: #ffffff;
-    --surface-2: #f0e2cc;
-    --ink: #2a1c14;
-    --ink-soft: #4f3a2c;
-    --muted: #8a7360;
-    --lantern: #c8291f;
-    --lantern-strong: #a81f17;
-    --gold: #d99a2b;
-    --line: rgba(42, 28, 20, 0.14);
-    --shadow: rgba(42, 28, 20, 0.16);
-    --grain-opacity: 0.05;
+    --ground: #efe5d3;       /* 生成りの和紙 */
+    --surface: #e5d6bd;
+    --paper: #faf5ea;        /* 短冊の紙(ダークモードでも明るいまま) */
+    --paper-ink: #1e1a16;    /* 短冊の墨(常に濃色) */
+    --ink: #1e1a16;
+    --ink-soft: #463c33;
+    --muted: #6f6152;
+    --shu: #c8361f;          /* 朱 */
+    --shu-strong: #a32a17;
+    --ai: #22385b;           /* 藍(のれん) */
+    --night: #1b1714;        /* 夜の帳(予約セクション・フッター) */
+    --line: rgba(30, 26, 22, 0.18);
+    --shadow: rgba(30, 26, 22, 0.22);
   }
 
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --ground: #1c130d;
-      --surface: #271b12;
-      --surface-2: #2f2116;
-      --ink: #f5e9da;
-      --ink-soft: #dcc4ac;
-      --muted: #b39a82;
-      --lantern: #e8432f;
-      --lantern-strong: #ff5a3c;
-      --gold: #f0b13f;
-      --line: rgba(245, 233, 218, 0.14);
-      --shadow: rgba(0, 0, 0, 0.5);
-      --grain-opacity: 0.08;
+      --ground: #16130f;
+      --surface: #201b16;
+      --paper: #f1e8d6;
+      --paper-ink: #1e1a16;
+      --ink: #f1e7d6;
+      --ink-soft: #d3c5b0;
+      --muted: #a89984;
+      --shu: #e4533a;
+      --shu-strong: #f06b50;
+      --ai: #2c4a78;
+      --night: #0d0b09;
+      --line: rgba(241, 231, 214, 0.16);
+      --shadow: rgba(0, 0, 0, 0.55);
     }
   }
   :root[data-theme="dark"] {
-    --ground: #1c130d;
-    --surface: #271b12;
-    --surface-2: #2f2116;
-    --ink: #f5e9da;
-    --ink-soft: #dcc4ac;
-    --muted: #b39a82;
-    --lantern: #e8432f;
-    --lantern-strong: #ff5a3c;
-    --gold: #f0b13f;
-    --line: rgba(245, 233, 218, 0.14);
-    --shadow: rgba(0, 0, 0, 0.5);
-    --grain-opacity: 0.08;
+    --ground: #16130f;
+    --surface: #201b16;
+    --paper: #f1e8d6;
+    --paper-ink: #1e1a16;
+    --ink: #f1e7d6;
+    --ink-soft: #d3c5b0;
+    --muted: #a89984;
+    --shu: #e4533a;
+    --shu-strong: #f06b50;
+    --ai: #2c4a78;
+    --night: #0d0b09;
+    --line: rgba(241, 231, 214, 0.16);
+    --shadow: rgba(0, 0, 0, 0.55);
   }
 
   * { box-sizing: border-box; }
@@ -69,403 +74,734 @@
 
   body {
     margin: 0;
-    background: var(--ground);
+    background-color: var(--ground);
+    /* 和紙の繊維感 */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.45 0 0 0 0 0.36 0 0 0 0 0.25 0 0 0 0.09 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
     color: var(--ink);
     font-family: "Zen Kaku Gothic New", "Hiragino Kaku Gothic ProN", sans-serif;
-    line-height: 1.8;
+    font-size: 16px;
+    line-height: 1.9;
     -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
   }
 
-  h1, h2, h3 { font-family: "Yuji Syuku", "Hiragino Mincho ProN", serif; text-wrap: balance; margin: 0; }
-
-  .eyebrow {
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 12px;
-    font-weight: 900;
-    letter-spacing: 0.24em;
-    color: var(--lantern-strong);
-  }
-  .eyebrow::before, .eyebrow::after { content: ""; width: 20px; height: 2px; background: var(--gold); opacity: 0.8; border-radius: 2px; }
-
+  h1, h2, h3 { margin: 0; font-weight: 400; text-wrap: balance; }
   a { color: inherit; }
+  img { display: block; max-width: 100%; }
+
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+  .v { writing-mode: vertical-rl; text-orientation: mixed; }
+
+  /* ---- サンプル表記 ---- */
+  .note {
+    position: relative;
+    z-index: 2;
+    margin: 0;
+    padding: 10px 24px;
+    background: var(--night);
+    color: #d9ccb8;
+    font-size: 12px;
+    line-height: 1.7;
+    text-align: center;
+  }
+  .note code { color: #ffb39f; font-size: 11.5px; }
+
+  /* ---- のれん ---- */
+  .noren {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+  .noren::before {
+    /* のれん竿 */
+    content: "";
+    position: absolute;
+    left: 8px; right: 8px; top: 0;
+    height: 10px;
+    background: linear-gradient(180deg, #6b4a2c, #3e2a18);
+    border-radius: 0 0 4px 4px;
+    box-shadow: 0 3px 6px var(--shadow);
+  }
+  .noren span {
+    display: grid;
+    place-items: center;
+    height: clamp(96px, 16vw, 148px);
+    padding-top: 10px;
+    background:
+      repeating-linear-gradient(90deg, rgba(255,255,255,0.035) 0 2px, transparent 2px 5px),
+      linear-gradient(180deg, color-mix(in srgb, var(--ai) 88%, #000), var(--ai) 30%, var(--ai));
+    color: #f6efe2;
+    font-family: "Dela Gothic One", sans-serif;
+    font-size: clamp(26px, 5vw, 46px);
+    line-height: 1;
+    border-radius: 0 0 3px 3px;
+    box-shadow: inset 0 -3px 0 rgba(0,0,0,0.18), 0 10px 20px -12px var(--shadow);
+    transform-origin: 50% 0;
+    animation: noren 6s ease-in-out infinite;
+  }
+  .noren span:nth-child(2) { animation-delay: -1.5s; }
+  .noren span:nth-child(3) { animation-delay: -3s; }
+  .noren span:nth-child(4) { animation-delay: -4.5s; }
+  @keyframes noren {
+    0%, 100% { transform: skewX(0deg) rotate(0deg); }
+    50% { transform: skewX(-1.2deg) rotate(0.6deg); }
+  }
 
   /* ---- ヒーロー ---- */
-  .hero {
+  .hero { padding: 56px 0 104px; }
+  .hero-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+    gap: 56px;
+    align-items: stretch;
+  }
+  .hero-photo {
     position: relative;
-    min-height: 100svh;
+    margin: 0;
+    min-height: 520px;
+    border-radius: 4px;
+    overflow: hidden;
+    background: #100b08;
+    box-shadow: 0 30px 60px -30px var(--shadow);
+  }
+  .hero-photo img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: 40% 60%;
+    transform: scale(1.04);
+    animation: settle 1.6s cubic-bezier(.2,.7,.2,1) forwards;
+  }
+  @keyframes settle { to { transform: scale(1); } }
+  .hero-photo::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(0deg, rgba(10,6,4,0.55), transparent 45%);
+    pointer-events: none;
+  }
+  .hero-photo figcaption {
+    position: absolute;
+    z-index: 1;
+    left: 22px; bottom: 18px;
+    color: #f4e9d8;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+  }
+
+  .hero-copy {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    padding: 100px 24px 80px;
-    overflow: hidden;
-    background: #100b08 url("images/hero-bg.jpg") center 30% / cover no-repeat;
-    /* 背景写真の上でも文字が読めるよう、ヒーロー内だけ常に明るい配色に固定 */
-    --ink: #fff9f2;
-    --ink-soft: #f2e2cf;
-    --muted: #e4cfb4;
-    --gold: #ffcf7a;
-    --lantern-strong: #ff7a4d;
+    justify-content: space-between;
+    gap: 40px;
   }
-  .hero::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background:
-      linear-gradient(180deg, rgba(12, 7, 5, 0.55), rgba(12, 7, 5, 0.72) 55%, rgba(12, 7, 5, 0.85)),
-      radial-gradient(ellipse 60% 50% at 50% 4%, color-mix(in srgb, var(--lantern) 30%, transparent), transparent 70%),
-      radial-gradient(ellipse 45% 40% at 12% 88%, color-mix(in srgb, var(--gold) 16%, transparent), transparent 70%),
-      radial-gradient(ellipse 45% 40% at 90% 82%, color-mix(in srgb, var(--lantern) 18%, transparent), transparent 70%);
-    pointer-events: none;
+  .hero-title-row {
+    display: flex;
+    flex-direction: row-reverse;
+    justify-content: flex-start;
+    align-items: flex-start;
+    gap: 22px;
   }
-  .hero::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    opacity: var(--grain-opacity);
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-    mix-blend-mode: overlay;
-    pointer-events: none;
-  }
-  .hero-inner { position: relative; max-width: 720px; }
-  .lantern-icon {
-    font-size: 34px;
-    filter: drop-shadow(0 6px 16px color-mix(in srgb, var(--lantern) 55%, transparent));
-    opacity: 0;
-    animation: rise 0.9s ease-out 0s forwards, sway 3.2s ease-in-out 1s infinite;
-    transform-origin: 50% -10px;
-  }
-  .hero .eyebrow { justify-content: center; margin-top: 18px; margin-bottom: 28px; opacity: 0; animation: rise 0.9s ease-out 0.1s forwards; }
   .hero h1 {
-    font-size: clamp(52px, 10vw, 100px);
-    font-weight: 400;
+    font-family: "Dela Gothic One", sans-serif;
+    font-size: clamp(60px, 7.4vw, 104px);
+    line-height: 1.05;
     letter-spacing: 0.04em;
     color: var(--ink);
-    opacity: 0;
-    animation: rise 1s ease-out 0.25s forwards;
   }
   .hero .tagline {
-    margin-top: 22px;
-    font-size: clamp(15px, 2vw, 19px);
+    margin: 10px 0 0;
+    font-family: "Yuji Syuku", serif;
+    font-size: clamp(20px, 2.2vw, 26px);
+    line-height: 1.6;
+    letter-spacing: 0.18em;
+    color: var(--ink-soft);
+  }
+  .hanko {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 58px;
+    height: 58px;
+    margin-top: auto;
+    margin-right: auto;
+    border: 3px solid var(--shu);
+    border-radius: 6px;
+    color: var(--shu);
+    font-family: "Yuji Syuku", serif;
+    font-size: 20px;
+    line-height: 1.05;
+    text-align: center;
+    transform: rotate(-8deg);
+    opacity: 0.88;
+  }
+  .rise { opacity: 0; animation: rise 0.9s cubic-bezier(.2,.7,.2,1) forwards; }
+  .d1 { animation-delay: 0.15s; } .d2 { animation-delay: 0.3s; } .d3 { animation-delay: 0.45s; } .d4 { animation-delay: 0.6s; }
+  @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+  .hero-actions { border-top: 2px solid var(--ink); padding-top: 22px; }
+  .hours-line {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+    margin: 18px 0 0;
+    font-size: 14px;
     font-weight: 700;
     color: var(--ink-soft);
-    letter-spacing: 0.06em;
-    opacity: 0;
-    animation: rise 1s ease-out 0.4s forwards;
   }
-  .hero .cta-row { margin-top: 44px; opacity: 0; animation: rise 1s ease-out 0.55s forwards; }
-  .hero .hours-hint {
-    margin-top: 28px;
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--muted);
-    letter-spacing: 0.04em;
-    opacity: 0;
-    animation: rise 1s ease-out 0.7s forwards;
-  }
+  .hours-line b { color: var(--shu-strong); font-weight: 900; }
 
-  @keyframes rise {
-    from { opacity: 0; transform: translateY(16px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-  @keyframes sway {
-    0%, 100% { transform: rotate(-4deg); }
-    50% { transform: rotate(4deg); }
-  }
-
+  /* ---- ボタン ---- */
   .btn {
     display: inline-flex;
     align-items: center;
-    gap: 10px;
-    padding: 17px 38px;
-    border-radius: 999px;
-    background: var(--lantern);
-    color: #fff8f2;
-    font-family: "Zen Kaku Gothic New", sans-serif;
+    justify-content: center;
+    gap: 14px;
+    padding: 18px 30px;
+    background: var(--shu);
+    color: #fffaf3;
     font-weight: 900;
-    font-size: 16px;
-    letter-spacing: 0.06em;
+    font-size: 17px;
+    letter-spacing: 0.08em;
     text-decoration: none;
-    box-shadow: 0 10px 30px -8px color-mix(in srgb, var(--lantern) 70%, transparent);
-    transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+    border-radius: 3px;
+    box-shadow: 4px 4px 0 var(--ink);
+    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
   }
-  .btn:hover { background: var(--lantern-strong); transform: translateY(-2px); box-shadow: 0 14px 34px -8px color-mix(in srgb, var(--lantern) 80%, transparent); }
-  .btn:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+  .btn:hover { background: var(--shu-strong); transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--ink); }
+  .btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
+  .btn:focus-visible, .tel-link:focus-visible { outline: 3px solid var(--shu); outline-offset: 4px; }
   .btn .arrow { transition: transform 0.2s ease; }
   .btn:hover .arrow { transform: translateX(4px); }
+  .btn-block { display: flex; width: 100%; }
 
-  .btn-ghost {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 15px 30px;
-    border-radius: 999px;
-    border: 1px solid var(--line);
-    color: var(--ink);
-    font-weight: 700;
+  /* ---- セクション見出し ---- */
+  section.block { padding: 112px 0; }
+  .sec-head {
+    display: flex;
+    align-items: flex-end;
+    gap: 20px;
+    margin-bottom: 56px;
+    padding-bottom: 18px;
+    border-bottom: 2px solid var(--ink);
+  }
+  .sec-head .no {
+    font-family: "Yuji Syuku", serif;
     font-size: 15px;
-    letter-spacing: 0.05em;
-    text-decoration: none;
-    transition: border-color 0.2s ease, background 0.2s ease;
+    color: var(--shu-strong);
+    letter-spacing: 0.2em;
+    white-space: nowrap;
+    padding-bottom: 6px;
   }
-  .btn-ghost:hover { border-color: var(--gold); background: color-mix(in srgb, var(--gold) 12%, transparent); }
-
-  /* ---- 共通セクション ---- */
-  section { padding: 120px 24px; }
-  .wrap { max-width: 1040px; margin: 0 auto; }
-  .reveal { opacity: 0; transform: translateY(28px); transition: opacity 0.8s ease, transform 0.8s ease; }
-  .reveal.is-visible { opacity: 1; transform: translateY(0); }
-
-  .divider {
-    width: 44px;
-    height: 2px;
-    background: var(--gold);
-    margin: 26px auto 0;
-    border-radius: 2px;
+  .sec-head h2 {
+    font-family: "Dela Gothic One", sans-serif;
+    font-size: clamp(30px, 4.2vw, 46px);
+    line-height: 1.2;
   }
-  .section-head { text-align: center; max-width: 620px; margin: 0 auto 64px; }
-  .section-head h2 { font-size: clamp(30px, 4vw, 44px); font-weight: 400; }
-  .section-head p { margin-top: 18px; color: var(--muted); font-size: 15px; font-weight: 700; }
+  .sec-head .en {
+    margin-left: auto;
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: 0.3em;
+    color: var(--muted);
+    padding-bottom: 8px;
+    white-space: nowrap;
+  }
+
+  .reveal { opacity: 0; transform: translateY(24px); transition: opacity 0.8s ease, transform 0.8s cubic-bezier(.2,.7,.2,1); }
+  .reveal.is-visible { opacity: 1; transform: none; }
 
   /* ---- 想い ---- */
-  .story {
+  .story-grid {
     display: grid;
-    grid-template-columns: 1fr;
-    gap: 40px;
-    text-align: center;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 72px;
+    align-items: start;
   }
   .story-lede {
+    margin: 0;
     font-family: "Yuji Syuku", serif;
-    font-size: clamp(24px, 3.4vw, 32px);
-    font-weight: 400;
-    color: var(--ink);
-    max-width: 640px;
-    margin: 0 auto;
+    font-size: clamp(30px, 3.6vw, 40px);
+    line-height: 1.7;
+    letter-spacing: 0.12em;
+    max-height: 13em;
   }
-  .story p.body-text {
-    max-width: 60ch;
-    margin: 22px auto 0;
-    color: var(--ink-soft);
-    font-size: 15.5px;
+  .story-lede em { font-style: normal; color: var(--shu); }
+  .story-body p { margin: 0 0 1.2em; max-width: 34em; color: var(--ink-soft); font-size: 16px; }
+  .story-facts {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin: 40px 0 0;
+    border-top: 1px solid var(--line);
   }
+  .story-facts div { padding: 20px 16px 0 0; }
+  .story-facts dt { font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: 0.1em; }
+  .story-facts dd { margin: 4px 0 0; font-family: "Dela Gothic One", sans-serif; font-size: clamp(20px, 2.4vw, 28px); line-height: 1.3; }
+  .story-facts dd small { font-family: "Zen Kaku Gothic New", sans-serif; font-size: 13px; font-weight: 700; margin-left: 2px; }
 
-  /* ---- コース ---- */
+  /* ---- コース(短冊) ---- */
   .courses { background: var(--surface); }
   .course-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-    gap: 24px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 32px;
   }
-  .course-card {
+  .course {
+    display: flex;
+    flex-direction: column;
+  }
+  .tanzaku {
     position: relative;
-    background: var(--ground);
-    border: 1px solid var(--line);
-    border-radius: 18px;
-    padding: 36px 28px;
-    text-align: left;
-    transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+    display: flex;
+    flex-direction: row-reverse;
+    justify-content: center;
+    gap: 18px;
+    min-height: 340px;
+    padding: 40px 20px 32px;
+    background: var(--paper);
+    color: var(--paper-ink);
+    border-radius: 2px;
+    box-shadow: 0 1px 0 rgba(0,0,0,0.06), 0 18px 30px -18px var(--shadow);
+    transform: rotate(var(--tilt, 0deg));
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
   }
-  .course-card:hover { transform: translateY(-6px); box-shadow: 0 20px 40px -20px var(--shadow); border-color: var(--gold); }
-  .course-card .badge {
+  .tanzaku::before {
+    /* 留めテープ */
+    content: "";
     position: absolute;
-    top: -12px;
-    right: 20px;
-    background: var(--lantern);
-    color: #fff8f2;
+    top: -10px; left: 50%;
+    width: 64px; height: 22px;
+    transform: translateX(-50%) rotate(-2deg);
+    background: rgba(214, 196, 160, 0.75);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+  }
+  .course:hover .tanzaku { transform: rotate(0deg) translateY(-4px); box-shadow: 0 1px 0 rgba(0,0,0,0.06), 0 26px 40px -20px var(--shadow); }
+  .course:nth-child(1) { --tilt: -1.2deg; }
+  .course:nth-child(2) { --tilt: 0.8deg; }
+  .course:nth-child(3) { --tilt: -0.5deg; }
+  .tanzaku h3 {
+    font-family: "Yuji Syuku", serif;
+    font-size: 38px;
+    line-height: 1.1;
+    letter-spacing: 0.12em;
+  }
+  .tanzaku .dur {
+    margin: 0;
+    padding-top: 60px;
+    font-family: "Yuji Syuku", serif;
+    font-size: 18px;
+    letter-spacing: 0.14em;
+    color: #b0301b;
+  }
+  .tanzaku .stamp {
+    position: absolute;
+    left: 16px; bottom: 18px;
+    display: grid;
+    place-items: center;
+    width: 54px; height: 54px;
+    border-radius: 50%;
+    border: 2px solid #c8361f;
+    color: #c8361f;
     font-size: 11px;
     font-weight: 900;
-    letter-spacing: 0.08em;
-    padding: 6px 14px;
-    border-radius: 999px;
-    box-shadow: 0 6px 16px -6px color-mix(in srgb, var(--lantern) 70%, transparent);
+    line-height: 1.25;
+    text-align: center;
+    transform: rotate(-12deg);
   }
-  .course-card .num {
+  .course .desc { margin: 22px 4px 0; color: var(--ink-soft); font-size: 14.5px; line-height: 1.9; }
+  .course .desc strong { display: block; color: var(--ink); font-size: 15px; margin-bottom: 4px; }
+
+  /* ---- おしながき(壁の短冊) ---- */
+  .wall-head {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    margin: 88px 0 28px;
+  }
+  .wall-head h3 { font-family: "Dela Gothic One", sans-serif; font-size: 24px; }
+  .wall-head p { margin: 0; font-size: 13px; color: var(--muted); font-weight: 700; }
+  .wall {
+    display: flex;
+    flex-direction: row-reverse;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 14px;
+    padding: 30px 20px 26px;
+    background:
+      repeating-linear-gradient(90deg, rgba(0,0,0,0.05) 0 1px, transparent 1px 90px),
+      linear-gradient(180deg, #5b3e26, #4a3220);
+    border-radius: 4px;
+    box-shadow: inset 0 0 0 6px #3a2716, 0 24px 40px -26px var(--shadow);
+  }
+  .wall li {
+    list-style: none;
+    display: flex;
+    flex-direction: row-reverse;
+    align-items: flex-start;
+    gap: 2px;
+    width: 64px;
+    min-height: 236px;
+    padding: 16px 0 12px;
+    justify-content: center;
+    background: var(--paper);
+    color: var(--paper-ink);
     font-family: "Yuji Syuku", serif;
-    font-size: 15px;
-    color: var(--gold);
-    letter-spacing: 0.15em;
+    box-shadow: 0 6px 10px -6px rgba(0,0,0,0.5);
+    transform: rotate(var(--t, 0deg));
   }
-  .course-card h3 { margin-top: 14px; font-size: 24px; font-weight: 400; }
-  .course-card .duration { margin-top: 10px; color: var(--muted); font-size: 13.5px; font-weight: 700; letter-spacing: 0.04em; }
-  .course-card .desc { margin-top: 16px; color: var(--ink-soft); font-size: 14px; line-height: 1.9; }
+  .wall li:nth-child(3n+1) { --t: -1deg; }
+  .wall li:nth-child(3n+2) { --t: 0.7deg; }
+  .wall li:nth-child(4n) { --t: 1.4deg; }
+  .wall .item { font-size: 21px; letter-spacing: 0.08em; line-height: 1.2; }
+  .wall .price { font-size: 13px; color: #b0301b; letter-spacing: 0.05em; margin-top: auto; align-self: flex-end; line-height: 1.2; }
+  .wall li.hot { background: #c8361f; color: #fff8ef; }
+  .wall li.hot .price { color: #ffe3c8; }
 
   /* ---- 営業案内 ---- */
   .info-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 48px;
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+    gap: 56px;
+    align-items: start;
   }
-  .info-item .eyebrow { margin-bottom: 14px; }
-  .info-item dl { margin: 0; }
-  .info-item dt { font-size: 13px; color: var(--muted); font-weight: 700; margin-top: 14px; }
-  .info-item dt:first-child { margin-top: 0; }
-  .info-item dd { margin: 4px 0 0; font-size: 16px; font-weight: 700; }
-  .info-item dd.small { font-size: 14px; font-weight: 400; color: var(--ink-soft); }
+  .ledger { margin: 0; }
+  .ledger div {
+    display: grid;
+    grid-template-columns: 7em minmax(0, 1fr);
+    gap: 16px;
+    padding: 20px 0;
+    border-bottom: 1px dashed var(--line);
+  }
+  .ledger div:first-child { padding-top: 0; }
+  .ledger dt { font-size: 13px; font-weight: 900; color: var(--muted); letter-spacing: 0.14em; padding-top: 3px; }
+  .ledger dd { margin: 0; font-size: 17px; font-weight: 700; }
+  .ledger dd small { display: block; font-size: 13.5px; font-weight: 500; color: var(--ink-soft); margin-top: 2px; }
+
+  .call-card {
+    position: relative;
+    padding: 34px 30px 30px;
+    background: var(--paper);
+    color: var(--paper-ink);
+    border: 2px solid var(--paper-ink);
+    box-shadow: 8px 8px 0 var(--shu);
+  }
+  .call-card .label { font-size: 12px; font-weight: 900; letter-spacing: 0.22em; color: #a32a17; }
+  .call-card .tel-link {
+    display: block;
+    margin-top: 8px;
+    font-family: "Dela Gothic One", sans-serif;
+    font-size: clamp(26px, 2.6vw, 32px);
+    line-height: 1.3;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    text-decoration: none;
+    color: var(--paper-ink);
+  }
+  .call-card .tel-link:hover { color: #a32a17; }
+  .call-card p { margin: 12px 0 0; font-size: 13.5px; color: #4a4038; }
+  .call-card hr { border: 0; border-top: 1px dashed rgba(30,26,22,0.3); margin: 24px 0; }
 
   /* ---- 予約CTA ---- */
-  .cta-section {
-    background: linear-gradient(180deg, var(--surface), var(--surface-2));
-    text-align: center;
+  .cta {
     position: relative;
     overflow: hidden;
+    padding: 120px 0 128px;
+    background: var(--night);
+    color: #f4eadb;
+    text-align: center;
   }
-  .cta-section::before {
+  .cta::before {
     content: "";
     position: absolute;
     inset: 0;
-    background: radial-gradient(ellipse 50% 60% at 50% 0%, color-mix(in srgb, var(--lantern) 18%, transparent), transparent 70%);
+    background:
+      radial-gradient(ellipse 30% 50% at 14% 0%, rgba(228, 83, 58, 0.28), transparent 70%),
+      radial-gradient(ellipse 30% 50% at 86% 0%, rgba(228, 83, 58, 0.28), transparent 70%);
     pointer-events: none;
   }
-  .cta-section .wrap { position: relative; }
-  .cta-section h2 { font-size: clamp(28px, 4vw, 42px); font-weight: 400; }
-  .cta-section p { margin-top: 16px; color: var(--muted); font-size: 15px; font-weight: 700; }
-  .cta-section .btn { margin-top: 36px; }
+  .cta .wrap { position: relative; }
+  .cta h2 {
+    font-family: "Dela Gothic One", sans-serif;
+    font-size: clamp(30px, 4.8vw, 54px);
+    line-height: 1.35;
+  }
+  .cta h2 em { font-style: normal; color: #ff8a6e; }
+  .cta p { margin: 22px auto 0; max-width: 32em; color: #cdbfab; font-size: 15.5px; }
+  .cta .btn { margin-top: 44px; box-shadow: 4px 4px 0 #f4eadb; padding: 20px 40px; font-size: 18px; }
+  .cta .btn:hover { box-shadow: 6px 6px 0 #f4eadb; }
+  .cta .btn:active { box-shadow: 1px 1px 0 #f4eadb; }
+  .cta .sub { margin-top: 22px; font-size: 13px; color: #a8998a; }
 
+  /* 提灯 */
+  .chochin {
+    position: absolute;
+    top: 0;
+    width: 86px;
+    transform-origin: 50% 0;
+    animation: sway 4.2s ease-in-out infinite;
+  }
+  .chochin.left { left: 7%; }
+  .chochin.right { right: 7%; animation-delay: -2.1s; }
+  .chochin .cord { display: block; width: 2px; height: 36px; margin: 0 auto; background: #6b5a48; }
+  .chochin .cap { display: block; width: 46px; height: 10px; margin: 0 auto; background: #1a1410; border-radius: 3px; }
+  .chochin .body {
+    display: grid;
+    place-items: center;
+    height: 118px;
+    margin: -2px 0;
+    border-radius: 50% / 44%;
+    background:
+      repeating-linear-gradient(180deg, transparent 0 9px, rgba(0,0,0,0.16) 9px 10px),
+      radial-gradient(ellipse at 50% 45%, #ff6a45, #d63a1f 55%, #8f1f10);
+    box-shadow: 0 0 46px 10px rgba(255, 90, 55, 0.35);
+    color: #1a1410;
+    font-family: "Yuji Syuku", serif;
+    font-size: 34px;
+    line-height: 1;
+  }
+  @keyframes sway { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg); } }
+
+  /* ---- フッター ---- */
   footer {
-    padding: 48px 24px 60px;
-    text-align: center;
-    color: var(--muted);
+    padding: 56px 0 64px;
+    background: var(--night);
+    color: #a8998a;
     font-size: 13px;
-    letter-spacing: 0.04em;
+    border-top: 1px solid rgba(244, 234, 219, 0.1);
   }
-  footer .mark { font-family: "Yuji Syuku", serif; font-size: 20px; color: var(--ink); margin-bottom: 10px; }
+  footer .wrap { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
+  footer .mark { font-family: "Dela Gothic One", sans-serif; font-size: 22px; color: #f4eadb; }
 
-  .note {
-    max-width: 1040px;
-    margin: 0 auto 40px;
-    padding: 16px 20px;
-    border: 1px dashed var(--line);
-    border-radius: 12px;
-    font-size: 12.5px;
-    color: var(--muted);
-    text-align: center;
+  /* ---- スマホ用 固定予約バー ---- */
+  .sticky-bar {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    z-index: 10;
+    display: none;
+    gap: 10px;
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+    background: color-mix(in srgb, var(--night) 94%, transparent);
+    backdrop-filter: blur(8px);
+    transform: translateY(110%);
+    transition: transform 0.3s ease;
   }
-  .note code { color: var(--lantern-strong); }
+  .sticky-bar.is-shown { transform: none; }
+  .sticky-bar .btn { flex: 1; padding: 14px 16px; font-size: 15px; box-shadow: none; }
+  .sticky-bar .tel-btn {
+    display: grid;
+    place-items: center;
+    padding: 0 16px;
+    border: 1px solid rgba(244, 234, 219, 0.35);
+    border-radius: 3px;
+    color: #f4eadb;
+    font-size: 13px;
+    font-weight: 900;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  /* ---- レスポンシブ ---- */
+  @media (max-width: 900px) {
+    .hero { padding: 32px 0 80px; }
+    .hero-grid { grid-template-columns: minmax(0, 1fr); gap: 36px; }
+    .hero-photo { min-height: 0; aspect-ratio: 4 / 3; }
+    .hero-copy { gap: 32px; }
+    .hero-title-row { justify-content: flex-start; }
+    .story-grid { grid-template-columns: minmax(0, 1fr); gap: 40px; }
+    .story-lede { max-height: 9.5em; margin-left: auto; margin-right: auto; }
+    .course-grid { grid-template-columns: minmax(0, 1fr); gap: 48px; max-width: 460px; margin: 0 auto; }
+    .tanzaku { min-height: 300px; }
+    .info-grid { grid-template-columns: minmax(0, 1fr); gap: 48px; }
+    .chochin { width: 64px; }
+    .chochin .body { height: 86px; font-size: 26px; }
+    .chochin.left { left: 4%; }
+    .chochin.right { right: 4%; }
+    .cta { padding-top: 160px; }
+  }
+  @media (max-width: 640px) {
+    .wrap { padding: 0 16px; }
+    .noren { padding: 0 16px; gap: 4px; }
+    section.block { padding: 80px 0; }
+    .sec-head { flex-wrap: wrap; gap: 4px 14px; margin-bottom: 40px; }
+    .sec-head .en { display: none; }
+    .story-facts { grid-template-columns: 1fr; }
+    .story-facts div { display: flex; justify-content: space-between; align-items: baseline; padding: 14px 0; border-bottom: 1px solid var(--line); }
+    .wall { gap: 10px; padding: 24px 12px 20px; }
+    .wall li { width: 52px; min-height: 200px; }
+    .wall .item { font-size: 18px; }
+    .ledger div { grid-template-columns: 1fr; gap: 2px; }
+    .call-card { padding: 28px 22px 24px; box-shadow: 6px 6px 0 var(--shu); margin-right: 6px; }
+    .sticky-bar { display: flex; }
+    footer { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
+  }
 </style>
 </head>
 <body>
 
-<div class="note">
-  これはサンプルです。店名・キャッチコピー・住所・電話番号・営業時間と、下記の予約ボタンのリンク先(<code>RESERVATION_URL</code>)を、実際の内容に差し替えてご利用ください。
-  背景写真(<code>images/hero-bg.jpg</code>)もフリー素材のダミーです。実店舗で使う際は、お店の実際の写真に差し替えてください。
-</div>
+<p class="note">
+  これはサンプルです。店名・キャッチコピー・住所・電話番号・営業時間・おしながきと、予約ボタンのリンク先(<code>RESERVATION_URL</code>)を実際の内容に差し替えてご利用ください。写真(<code>images/hero-bg.jpg</code>)もフリー素材のダミーです。
+</p>
 
+<header class="noren" aria-hidden="true">
+  <span>大</span><span>衆</span><span>酒</span><span>場</span>
+</header>
+
+<main>
 <section class="hero">
-  <div class="hero-inner">
-    <div class="lantern-icon" aria-hidden="true">🏮</div>
-    <div class="eyebrow">SAMPLE IZAKAYA</div>
-    <h1>サンプル食堂</h1>
-    <p class="tagline">今日も一杯、旨いもんと。</p>
-    <div class="cta-row">
-      <a class="btn reserve-link" href="#" target="_blank" rel="noopener">
-        空席をみて予約する <span class="arrow">→</span>
-      </a>
+  <div class="wrap hero-grid">
+    <figure class="hero-photo">
+      <img src="images/hero-bg.jpg" alt="炭火で焼かれる串焼き" width="2400" height="1600">
+      <figcaption>炭火で、一本ずつ。</figcaption>
+    </figure>
+
+    <div class="hero-copy">
+      <div class="hero-title-row">
+        <h1 class="v rise">サンプル食堂</h1>
+        <p class="tagline v rise d1">今日も一杯、旨いもんと。</p>
+        <span class="hanko rise d2" aria-hidden="true">大衆<br>酒場</span>
+      </div>
+      <div class="hero-actions rise d3">
+        <a class="btn btn-block reserve-link" id="hero-reserve" href="#" target="_blank" rel="noopener">
+          空席をみて予約する <span class="arrow" aria-hidden="true">→</span>
+        </a>
+        <p class="hours-line"><span><b>年中無休</b></span><span>17:00–24:00(L.O. 23:00)</span><span>〇〇駅 徒歩3分</span></p>
+      </div>
     </div>
-    <p class="hours-hint">年中無休 ・ 17:00–24:00(L.O. 23:00)</p>
   </div>
 </section>
 
-<section class="story">
-  <div class="wrap reveal">
-    <div class="eyebrow" style="justify-content:center;">OUR STYLE</div>
-    <p class="story-lede" style="margin-top:24px;">
-      気取らず、腹いっぱい、心もいっぱいに。
-    </p>
-    <p class="body-text">
-      サンプル食堂は、仕事帰りにふらっと寄れる大衆酒場です。
-      よく冷えた生ビールと、その日仕入れた旬の肴を、気の合う仲間とワイワイ楽しんでいただけます。
-      おひとりでカウンターも、大人数の宴会も、どうぞお気軽に。
-    </p>
-  </div>
-</section>
-
-<section class="courses">
+<section class="block story">
   <div class="wrap">
-    <div class="section-head reveal">
-      <div class="eyebrow" style="justify-content:center;">MENU</div>
-      <h2 style="margin-top:20px;">コースのご案内</h2>
-      <p>ご予約フォームからお選びいただけます。</p>
+    <div class="sec-head reveal">
+      <span class="no">其の一</span>
+      <h2>当店について</h2>
+      <span class="en">OUR STYLE</span>
     </div>
+    <div class="story-grid reveal">
+      <p class="story-lede v">気取らず、<br><em>腹いっぱい</em>、<br>心もいっぱいに。</p>
+      <div class="story-body">
+        <p>サンプル食堂は、仕事帰りにふらっと寄れる大衆酒場です。よく冷えた生ビールと、その日仕入れた旬の肴を、気の合う仲間とワイワイ楽しんでいただけます。</p>
+        <p>おひとりでカウンターも、大人数の宴会も、どうぞお気軽に。暖簾をくぐれば、今日もいつもの賑わいでお待ちしています。</p>
+        <dl class="story-facts">
+          <div><dt>座席</dt><dd>40<small>席</small></dd></div>
+          <div><dt>営業</dt><dd>年中<small>無休</small></dd></div>
+          <div><dt>駅から</dt><dd>徒歩3<small>分</small></dd></div>
+        </dl>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="block courses">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="no">其の二</span>
+      <h2>コースのご案内</h2>
+      <span class="en">COURSES</span>
+    </div>
+
     <div class="course-grid reveal">
-      <div class="course-card">
-        <span class="badge">飲み放題付</span>
-        <div class="num">壱</div>
-        <h3>宴会コース</h3>
-        <div class="duration">目安 180分</div>
-        <p class="desc">串焼きや旬の肴が並ぶ、飲み放題付きの宴会コース。歓送迎会・打ち上げ・記念日にも。</p>
-      </div>
-      <div class="course-card">
-        <div class="num">弐</div>
-        <h3>ちょい飲みセット</h3>
-        <div class="duration">目安 90分</div>
-        <p class="desc">生ビール+肴3品の気軽な一杯セット。仕事帰りにサクッと寄れます。</p>
-      </div>
-      <div class="course-card">
-        <div class="num">参</div>
-        <h3>お食事のみ</h3>
-        <div class="duration">目安 90分</div>
-        <p class="desc">コースのご注文なしで、お好きな一品料理とお酒をゆっくりどうぞ。</p>
-      </div>
+      <article class="course">
+        <div class="tanzaku">
+          <h3 class="v">宴会コース</h3>
+          <p class="dur v">目安 百八十分</p>
+          <span class="stamp">飲み<br>放題付</span>
+        </div>
+        <p class="desc"><strong>歓送迎会・打ち上げに</strong>串焼きや旬の肴が並ぶ、飲み放題付きの宴会コース。記念日のお祝いにも。</p>
+      </article>
+      <article class="course">
+        <div class="tanzaku">
+          <h3 class="v">ちょい飲み</h3>
+          <p class="dur v">目安 九十分</p>
+        </div>
+        <p class="desc"><strong>仕事帰りにサクッと</strong>生ビールと肴3品の気軽な一杯セット。おひとりさまも大歓迎です。</p>
+      </article>
+      <article class="course">
+        <div class="tanzaku">
+          <h3 class="v">お食事のみ</h3>
+          <p class="dur v">目安 九十分</p>
+        </div>
+        <p class="desc"><strong>席だけ予約したい方に</strong>コースのご注文なしで、お好きな一品料理とお酒をゆっくりどうぞ。</p>
+      </article>
     </div>
+
+    <div class="wall-head reveal">
+      <h3>本日のおしながき</h3>
+      <p>※掲載は一例です。仕入れにより変わります。</p>
+    </div>
+    <ul class="wall reveal" aria-label="おしながき">
+      <li class="hot"><span class="item v">生ビール</span><span class="price v">五八〇円</span></li>
+      <li><span class="item v">焼き鳥盛り</span><span class="price v">九八〇円</span></li>
+      <li><span class="item v">だし巻き玉子</span><span class="price v">五五〇円</span></li>
+      <li><span class="item v">刺身三点盛</span><span class="price v">千二百円</span></li>
+      <li><span class="item v">ポテサラ</span><span class="price v">四八〇円</span></li>
+      <li><span class="item v">枝豆</span><span class="price v">三八〇円</span></li>
+      <li><span class="item v">ハイボール</span><span class="price v">四八〇円</span></li>
+      <li><span class="item v">〆の焼おにぎり</span><span class="price v">三五〇円</span></li>
+    </ul>
   </div>
 </section>
 
-<section class="info">
+<section class="block info">
   <div class="wrap">
-    <div class="section-head reveal">
-      <div class="eyebrow" style="justify-content:center;">INFORMATION</div>
-      <h2 style="margin-top:20px;">営業のご案内</h2>
+    <div class="sec-head reveal">
+      <span class="no">其の三</span>
+      <h2>営業のご案内</h2>
+      <span class="en">INFORMATION</span>
     </div>
     <div class="info-grid reveal">
-      <div class="info-item">
-        <div class="eyebrow">HOURS</div>
-        <dl>
-          <dt>営業時間</dt>
-          <dd>17:00 – 24:00(L.O. 23:00)</dd>
-          <dt>定休日</dt>
-          <dd>年中無休</dd>
-        </dl>
-      </div>
-      <div class="info-item">
-        <div class="eyebrow">ACCESS</div>
-        <dl>
-          <dt>住所</dt>
-          <dd class="small">〇〇県〇〇市〇〇 1-2-3</dd>
-          <dt>最寄駅</dt>
-          <dd class="small">〇〇駅 徒歩3分</dd>
-        </dl>
-      </div>
-      <div class="info-item">
-        <div class="eyebrow">CONTACT</div>
-        <dl>
-          <dt>電話番号</dt>
-          <dd>000-0000-0000</dd>
-          <dt>ご予約</dt>
-          <dd class="small">下のボタンからオンライン予約が可能です</dd>
-        </dl>
-      </div>
+      <dl class="ledger">
+        <div><dt>営業時間</dt><dd>17:00 – 24:00<small>ラストオーダー 23:00</small></dd></div>
+        <div><dt>定休日</dt><dd>年中無休<small>年末年始は別途お知らせします</small></dd></div>
+        <div><dt>住所</dt><dd>〇〇県〇〇市〇〇 1-2-3<small>〇〇ビル 1階</small></dd></div>
+        <div><dt>最寄駅</dt><dd>〇〇駅 徒歩3分<small>東口を出てまっすぐ、赤提灯が目印です</small></dd></div>
+      </dl>
+      <aside class="call-card">
+        <div class="label">お電話でのご予約・お問い合わせ</div>
+        <a class="tel-link" href="tel:000-0000-0000">000-0000-0000</a>
+        <p>営業時間中に承ります。混み合う時間帯はつながりにくい場合がございます。</p>
+        <hr>
+        <div class="label">オンライン予約</div>
+        <p style="margin-top:6px;">空席状況を見ながら、24時間いつでもご予約いただけます。</p>
+      </aside>
     </div>
   </div>
 </section>
+</main>
 
-<section class="cta-section">
+<section class="cta">
+  <div class="chochin left" aria-hidden="true"><span class="cord"></span><span class="cap"></span><span class="body">酒</span><span class="cap"></span></div>
+  <div class="chochin right" aria-hidden="true"><span class="cord"></span><span class="cap"></span><span class="body">肴</span><span class="cap"></span></div>
   <div class="wrap reveal">
-    <div class="eyebrow" style="justify-content:center;">RESERVATION</div>
-    <h2 style="margin-top:20px;">予約はオンラインで、24時間受付中。</h2>
-    <p>空席状況を確認しながら、その場でご予約いただけます。今夜の一杯、確保しませんか。</p>
+    <h2>今夜の一杯、<br><em>席を取っておきます。</em></h2>
+    <p>空席状況を確認しながら、その場でご予約が完了します。確認メールもすぐに届きます。</p>
     <a class="btn reserve-link" href="#" target="_blank" rel="noopener">
-      空席をみて予約する <span class="arrow">→</span>
+      空席をみて予約する <span class="arrow" aria-hidden="true">→</span>
     </a>
+    <div class="sub">オンライン予約は24時間受付中</div>
   </div>
 </section>
 
 <footer>
-  <div class="mark">サンプル食堂</div>
-  <div>&copy; 2026 Sample Shokudo. This is a sample page.</div>
+  <div class="wrap">
+    <div class="mark">サンプル食堂</div>
+    <div>&copy; 2026 Sample Shokudo. This is a sample page.</div>
+  </div>
 </footer>
+
+<div class="sticky-bar" id="sticky-bar">
+  <a class="btn reserve-link" href="#" target="_blank" rel="noopener">空席をみて予約 <span class="arrow" aria-hidden="true">→</span></a>
+  <a class="tel-btn" href="tel:000-0000-0000">電話</a>
+</div>
 
 <script>
   // 予約フォームのURL。デプロイ後、実際のWebアプリURL(.../exec)に差し替えてください。
@@ -480,16 +816,26 @@
     }
   });
 
-  // スクロールで各セクションをふわっと表示(reduce motion環境ではCSS側で無効化される)
-  var io = new IntersectionObserver(function (entries) {
-    entries.forEach(function (entry) {
-      if (entry.isIntersecting) {
-        entry.target.classList.add('is-visible');
-        io.unobserve(entry.target);
-      }
-    });
-  }, { threshold: 0.15 });
-  document.querySelectorAll('.reveal').forEach(function (el) { io.observe(el); });
+  if ('IntersectionObserver' in window) {
+    // スクロールで各セクションをふわっと表示(reduce motion環境ではCSS側で無効化される)
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-visible');
+          io.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.12 });
+    document.querySelectorAll('.reveal').forEach(function (el) { io.observe(el); });
+
+    // スマホ: ヒーローの予約ボタンが画面外に出たら下部に固定予約バーを出す
+    var bar = document.getElementById('sticky-bar');
+    new IntersectionObserver(function (entries) {
+      bar.classList.toggle('is-shown', !entries[0].isIntersecting && entries[0].boundingClientRect.top < 0);
+    }).observe(document.getElementById('hero-reserve'));
+  } else {
+    document.querySelectorAll('.reveal').forEach(function (el) { el.classList.add('is-visible'); });
+  }
 </script>
 
 </body>
