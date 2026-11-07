@@ -16,7 +16,7 @@
   "notifyEmail": "",
   "storePhone": "",
   "storeAddress": "",
-  "requireKana": false,
+  "requireKana": true,
   "requireEmail": true,
   "adminPassword": "changeme",
   "waitlistEnabled": true,

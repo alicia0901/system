@@ -95,7 +95,7 @@ const configBlock = `const CONFIG = {
   NOTIFY_EMAIL: ${jsonStr(cfg.notifyEmail || '')},
   STORE_PHONE: ${jsonStr(cfg.storePhone || '')},
   STORE_ADDRESS: ${jsonStr(cfg.storeAddress || '')},
-  REQUIRE_KANA: ${cfg.requireKana === true ? 'true' : 'false'},
+  REQUIRE_KANA: ${cfg.requireKana === false ? 'false' : 'true'},
   REQUIRE_EMAIL: ${cfg.requireEmail === false ? 'false' : 'true'},
   ADMIN_PASSWORD: ${jsonStr(cfg.adminPassword)},
   WAITLIST_ENABLED: ${cfg.waitlistEnabled === false ? 'false' : 'true'},

@@ -68,11 +68,12 @@ const CONFIG = {
   STORE_PHONE: '',
   STORE_ADDRESS: '',
 
-  // 予約フォームでフリガナ・メールアドレスを必須にするか。
-  // メールアドレスは確認メール・リマインダー(無断キャンセル対策)の送り先になるため既定で必須。
-  // false にすると任意になり、未入力のお客様には確認メール・リマインダーが届かない
+  // 予約フォームでフリガナ・メールアドレスを必須にするか(どちらも既定で必須)。
+  // フリガナは来店時の受付や電話での確認で読み方が分からないと困るため必須。
+  // メールアドレスは確認メール・リマインダー(無断キャンセル対策)の送り先になるため必須。
+  // false にするとそれぞれ任意になる。メール未入力のお客様には確認メール・リマインダーが届かない
   // (その場合もキャンセル待ちの登録だけは、空席のお知らせを送るためメールアドレス必須)。
-  REQUIRE_KANA: false,
+  REQUIRE_KANA: true,
   REQUIRE_EMAIL: true,
 
   // 管理画面(?page=admin)のログインパスワード。必ずデフォルトから変更してください。
@@ -291,7 +292,7 @@ function getConfig() {
     waitlistEnabled: !!CONFIG.WAITLIST_ENABLED,
     liffId: CONFIG.LIFF_ID || '',
     bookingCutoffMinutes: getBookingCutoffMinutes(),
-    requireKana: !!CONFIG.REQUIRE_KANA,
+    requireKana: isKanaRequired(),
     requireEmail: isEmailRequired(),
     storePhone: CONFIG.STORE_PHONE || '',
   };
@@ -304,6 +305,14 @@ function getConfig() {
 function getBookingCutoffMinutes() {
   const v = Number(CONFIG.BOOKING_CUTOFF_MINUTES);
   return Number.isFinite(v) && v > 0 ? v : 0;
+}
+
+/**
+ * 予約フォームでフリガナを必須にするか。明示的に false にした店舗だけ任意。
+ * CONFIG にキーがない古い店舗コードでは、従来どおり必須とみなす。
+ */
+function isKanaRequired() {
+  return CONFIG.REQUIRE_KANA !== false;
 }
 
 /**
@@ -380,7 +389,7 @@ function submitBooking(form) {
     if (!form || !form.name || !form.phone || !form.date || !form.time || !form.course || !form.partySize) {
       return { success: false, message: '必須項目が入力されていません。' };
     }
-    if (CONFIG.REQUIRE_KANA && !form.kana) {
+    if (isKanaRequired() && !form.kana) {
       return { success: false, message: 'フリガナを入力してください。' };
     }
     if (isEmailRequired() && !form.email) {
