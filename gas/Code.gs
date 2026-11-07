@@ -134,6 +134,15 @@ const NOSHOW_TITLE_PREFIX = '【無断キャンセル】';
 // 管理画面ログインのセッション有効期間(秒)
 const ADMIN_SESSION_TTL_SEC = 6 * 60 * 60; // 6時間
 
+// 管理画面ログインの総当たり対策。GAS からは接続元を区別できないため、失敗回数は全体で数える。
+// 最後の失敗から FAIL_WINDOW_SEC 秒以内に MAX_FAILURES 回失敗すると、LOCK_SEC 秒間ログインを受け付けない。
+const ADMIN_LOGIN_MAX_FAILURES = 10;
+const ADMIN_LOGIN_FAIL_WINDOW_SEC = 15 * 60;
+const ADMIN_LOGIN_LOCK_SEC = 15 * 60;
+const ADMIN_LOGIN_FAIL_KEY = 'admin_login_failures';
+const ADMIN_LOGIN_LOCK_KEY = 'admin_login_locked';
+const ADMIN_LOGIN_LOCKED_MESSAGE = 'ログインの失敗が続いたため、しばらくログインできないようにしています。15分ほど待ってからお試しください。';
+
 // 管理画面から変更したコース設定を保存するプロパティキー(PropertiesService)。
 // CONFIG.COURSES は setup/create-store.js による再生成で上書きされる「初期値」の位置づけとし、
 // 管理画面からの変更はここに保存することで、共通エンジンの更新や再生成に影響されないようにする。
@@ -564,12 +573,54 @@ function submitBooking(form) {
  * 管理画面ログイン。成功時はセッショントークンを返す。
  */
 function adminLogin(password) {
-  if (!CONFIG.ADMIN_PASSWORD || password !== CONFIG.ADMIN_PASSWORD) {
-    return { success: false, message: 'パスワードが違います。' };
+  // 失敗回数の読み書きを同時アクセスで取りこぼさないよう、排他区間の中で判定する
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const cache = CacheService.getScriptCache();
+
+    // ロック中は、正しいパスワードでも受け付けない(ロック中も試せると総当たりを続けられるため)
+    if (cache.get(ADMIN_LOGIN_LOCK_KEY)) {
+      return { success: false, message: ADMIN_LOGIN_LOCKED_MESSAGE };
+    }
+
+    if (!CONFIG.ADMIN_PASSWORD || password !== CONFIG.ADMIN_PASSWORD) {
+      const failures = (Number(cache.get(ADMIN_LOGIN_FAIL_KEY)) || 0) + 1;
+      if (failures >= ADMIN_LOGIN_MAX_FAILURES) {
+        cache.put(ADMIN_LOGIN_LOCK_KEY, '1', ADMIN_LOGIN_LOCK_SEC);
+        cache.remove(ADMIN_LOGIN_FAIL_KEY);
+        notifyAdminLoginLocked();
+        return { success: false, message: ADMIN_LOGIN_LOCKED_MESSAGE };
+      }
+      // 最後の失敗から ADMIN_LOGIN_FAIL_WINDOW_SEC 秒以内の失敗を数える
+      cache.put(ADMIN_LOGIN_FAIL_KEY, String(failures), ADMIN_LOGIN_FAIL_WINDOW_SEC);
+      return { success: false, message: 'パスワードが違います。' };
+    }
+
+    cache.remove(ADMIN_LOGIN_FAIL_KEY);
+    const token = Utilities.getUuid();
+    cache.put('admin_' + token, '1', ADMIN_SESSION_TTL_SEC);
+    return { success: true, token: token, storeName: CONFIG.STORE_NAME };
+  } finally {
+    lock.releaseLock();
   }
-  const token = Utilities.getUuid();
-  CacheService.getScriptCache().put('admin_' + token, '1', ADMIN_SESSION_TTL_SEC);
-  return { success: true, token: token, storeName: CONFIG.STORE_NAME };
+}
+
+/** ログインのロックが始まったことを店舗の通知先メールへ知らせる(通知先が未設定なら何もしない)。 */
+function notifyAdminLoginLocked() {
+  if (!CONFIG.NOTIFY_EMAIL) return;
+  try {
+    MailApp.sendEmail(
+      CONFIG.NOTIFY_EMAIL,
+      '[' + (CONFIG.STORE_NAME || '予約システム') + '] 管理画面のログインを一時ロックしました',
+      '管理画面へのログインに' + ADMIN_LOGIN_MAX_FAILURES + '回続けて失敗したため、' +
+        Math.round(ADMIN_LOGIN_LOCK_SEC / 60) + '分間ログインを受け付けないようにしました。\n\n' +
+        'お店の方の入力ミスでなければ、第三者がパスワードを推測しようとしている可能性があります。\n' +
+        'ロック解除後、念のため管理画面のパスワード(CONFIG.ADMIN_PASSWORD)の変更をご検討ください。'
+    );
+  } catch (err) {
+    Logger.log('ログインロック通知メールの送信エラー: ' + err.message);
+  }
 }
 
 /**
