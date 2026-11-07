@@ -472,19 +472,19 @@ function submitBooking(form) {
         const waitlistSheet = getOrCreateSheet();
         waitlistSheet.appendRow([
           new Date(),
-          form.name,
-          form.kana || '',
-          form.phone,
-          form.email || '',
-          form.date,
-          form.time,
+          textCell(form.name),
+          textCell(form.kana),
+          textCell(form.phone),
+          textCell(form.email),
+          textCell(form.date),
+          textCell(form.time),
           partySize,
-          form.course,
-          form.notes || '',
+          textCell(form.course),
+          textCell(form.notes),
           STATUS_WAITLIST,
           '', // カレンダー未登録(確定時に登録する)
           route,
-          lineDisplayName,
+          textCell(lineDisplayName),
           '', // リマインダー未送信
           '', // 空き通知未送信
         ]);
@@ -525,19 +525,19 @@ function submitBooking(form) {
     const sheet = getOrCreateSheet();
     sheet.appendRow([
       new Date(),
-      form.name,
-      form.kana || '',
-      form.phone,
-      form.email || '',
-      form.date,
-      form.time,
+      textCell(form.name),
+      textCell(form.kana),
+      textCell(form.phone),
+      textCell(form.email),
+      textCell(form.date),
+      textCell(form.time),
       partySize,
-      form.course,
-      form.notes || '',
+      textCell(form.course),
+      textCell(form.notes),
       STATUS_CONFIRMED,
       eventId,
       route,
-      lineDisplayName,
+      textCell(lineDisplayName),
       '', // リマインダー未送信
       '', // 空き通知未送信
     ]);
@@ -581,7 +581,7 @@ function getReservationsForAdmin(token, dateStr) {
   }
 
   const sheet = getOrCreateSheet();
-  const values = sheet.getDataRange().getValues();
+  const values = readAllRows(sheet);
   const reservations = [];
   let reservedSeats = 0;
   let waitlistCount = 0;
@@ -646,7 +646,7 @@ function getWeekForAdmin(token, fromDateStr) {
   }
 
   const sheet = getOrCreateSheet();
-  const values = sheet.getDataRange().getValues();
+  const values = readAllRows(sheet);
   const byDate = {};
   dateStrs.forEach(function (d) { byDate[d] = { reservedSeats: 0, count: 0, waitlistCount: 0 }; });
 
@@ -759,15 +759,15 @@ function createReservationAdmin(token, form) {
     const sheet = getOrCreateSheet();
     sheet.appendRow([
       new Date(),
-      form.name,
-      form.kana || '',
-      form.phone,
-      form.email || '',
-      form.date,
-      form.time,
+      textCell(form.name),
+      textCell(form.kana),
+      textCell(form.phone),
+      textCell(form.email),
+      textCell(form.date),
+      textCell(form.time),
       partySize,
-      form.course,
-      form.notes || '',
+      textCell(form.course),
+      textCell(form.notes),
       STATUS_CONFIRMED,
       eventId,
       ROUTE_STAFF,
@@ -806,7 +806,7 @@ function updateReservationAdmin(token, rowIndex, form) {
 
   try {
     const sheet = getOrCreateSheet();
-    const row = sheet.getRange(rowIndex, 1, 1, SHEET_HEADERS.length).getValues()[0];
+    const row = readRow(sheet, rowIndex);
     if (!row || !row[COL.NAME]) {
       return { success: false, message: '対象の予約が見つかりません。' };
     }
@@ -909,19 +909,19 @@ function updateReservationAdmin(token, rowIndex, form) {
 
     sheet.getRange(rowIndex, 1, 1, SHEET_HEADERS.length).setValues([[
       row[COL.RECEIVED_AT],
-      form.name,
-      form.kana || '',
-      form.phone,
-      form.email || '',
-      form.date,
-      form.time,
+      textCell(form.name),
+      textCell(form.kana),
+      textCell(form.phone),
+      textCell(form.email),
+      textCell(form.date),
+      textCell(form.time),
       partySize,
-      form.course,
-      form.notes || '',
+      textCell(form.course),
+      textCell(form.notes),
       status,
       eventId,
       row[COL.ROUTE] || ROUTE_WEB, // 申込経路・LINE表示名は変更内容に含まれないので元の値を維持する
-      row[COL.LINE_NAME] || '',
+      textCell(row[COL.LINE_NAME]),
       reminderSent,
       row[COL.WAITLIST_NOTIFIED] || '',
     ]]);
@@ -952,7 +952,7 @@ function promoteWaitlistAdmin(token, rowIndex, force) {
 
   try {
     const sheet = getOrCreateSheet();
-    const row = sheet.getRange(rowIndex, 1, 1, SHEET_HEADERS.length).getValues()[0];
+    const row = readRow(sheet, rowIndex);
     if (!row || !row[COL.NAME]) {
       return { success: false, message: '対象の予約が見つかりません。' };
     }
@@ -1026,7 +1026,7 @@ function cancelReservationAdmin(token, rowIndex) {
   lock.waitLock(30000);
   try {
     const sheet = getOrCreateSheet();
-    const row = sheet.getRange(rowIndex, 1, 1, SHEET_HEADERS.length).getValues()[0];
+    const row = readRow(sheet, rowIndex);
     if (!row || !row[COL.NAME]) {
       return { success: false, message: '対象の予約が見つかりません。' };
     }
@@ -1081,7 +1081,7 @@ function markNoShowAdmin(token, rowIndex, undo) {
   lock.waitLock(30000);
   try {
     const sheet = getOrCreateSheet();
-    const row = sheet.getRange(rowIndex, 1, 1, SHEET_HEADERS.length).getValues()[0];
+    const row = readRow(sheet, rowIndex);
     if (!row || !row[COL.NAME]) {
       return { success: false, message: '対象の予約が見つかりません。' };
     }
@@ -1310,7 +1310,7 @@ function getStatsForAdmin(token, fromDate, toDate) {
   }
 
   const sheet = getOrCreateSheet();
-  const values = sheet.getDataRange().getValues();
+  const values = readAllRows(sheet);
 
   let confirmedCount = 0;
   let confirmedPeople = 0;
@@ -1365,6 +1365,66 @@ function isValidAdminToken(token) {
 
 // ==================== ユーティリティ ====================
 
+// ==================== シートの読み書き(自動変換対策) ====================
+//
+// Google スプレッドシートは、文字列として書き込んだ値でも「入力値」とみなして自動変換する
+// ('2026-11-07' → 日付、'19:00' → 時刻、'09012345678' → 数値で先頭の0が消える、'=' 始まり → 数式)。
+// このシステムは日付・時刻を 'YYYY-MM-DD' / 'HH:mm' の文字列として比較するため、変換されると
+// 空席計算・一覧・リマインダーが一致しなくなる。そこで:
+//  - 書き込み: お客様の入力やコース名などの文字列は textCell() で「' + 値」にして文字として保存する
+//  - 読み込み: 必ず readAllRows() / readRow() を通し、既に変換済みの古い行も文字列に戻して扱う
+
+/** 文字として保存させたい値を「'」付きにする(空なら空のまま)。数式としての実行も防ぐ。 */
+function textCell(v) {
+  if (v === null || v === undefined || v === '') return '';
+  return "'" + String(v);
+}
+
+function getSheetTimeZone() {
+  try {
+    return SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone() || CONFIG.TIMEZONE;
+  } catch (e) {
+    return CONFIG.TIMEZONE;
+  }
+}
+
+/**
+ * シートから読んだ1行の、日付・時刻・電話番号の列を文字列にそろえる(元の配列は変更しない)。
+ * 日付・時刻のセルは Date で返ってくるため、シートのタイムゾーンで文字列に戻す
+ * (時刻だけのセルは 1899-12-30 の Date になり、別のタイムゾーンで整形するとずれるため)。
+ */
+function normalizeRow(row, tz) {
+  const out = row.slice();
+  const date = out[COL.DATE];
+  if (isDateValue(date)) out[COL.DATE] = Utilities.formatDate(date, tz, 'yyyy-MM-dd');
+  const time = out[COL.TIME];
+  if (isDateValue(time)) out[COL.TIME] = Utilities.formatDate(time, tz, 'HH:mm');
+  const phone = out[COL.PHONE];
+  if (typeof phone === 'number') {
+    // 数値に変換されて先頭の0が消えた電話番号を戻す(携帯11桁→10桁、固定10桁→9桁になっている)
+    const s = String(phone);
+    out[COL.PHONE] = /^\d{9,10}$/.test(s) ? '0' + s : s;
+  }
+  return out;
+}
+
+function isDateValue(v) {
+  return Object.prototype.toString.call(v) === '[object Date]' && !isNaN(v.getTime());
+}
+
+/** シート全体を読み、2行目以降を normalizeRow で整える(1行目はヘッダー)。 */
+function readAllRows(sheet) {
+  const tz = getSheetTimeZone();
+  return sheet.getDataRange().getValues().map(function (row, i) {
+    return i === 0 ? row : normalizeRow(row, tz);
+  });
+}
+
+/** 指定した行(シート上の行番号)を読み、normalizeRow で整える。 */
+function readRow(sheet, rowIndex) {
+  return normalizeRow(sheet.getRange(rowIndex, 1, 1, SHEET_HEADERS.length).getValues()[0], getSheetTimeZone());
+}
+
 function getOrCreateSheet() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName(CONFIG.SHEET_NAME);
@@ -1392,7 +1452,7 @@ function getOrCreateSheet() {
  */
 function getConfirmedRangesForDate(dateStr, excludeRowIndex) {
   const sheet = getOrCreateSheet();
-  const values = sheet.getDataRange().getValues();
+  const values = readAllRows(sheet);
   const ranges = [];
 
   for (let r = 1; r < values.length; r++) {
@@ -1553,7 +1613,7 @@ function sendWaitlistPromotedEmail(form, partySize) {
  */
 function notifyWaitlistOfOpening(dateStr) {
   const sheet = getOrCreateSheet();
-  const values = sheet.getDataRange().getValues();
+  const values = readAllRows(sheet);
   let notifiedCount = 0;
   let anyNotified = false;
 
@@ -1671,7 +1731,7 @@ function sendRemindersOfKind(kind) {
       : formatDateStr(now);
 
     const sheet = getOrCreateSheet();
-    const values = sheet.getDataRange().getValues();
+    const values = readAllRows(sheet);
 
     for (let r = 1; r < values.length; r++) {
       const row = values[r];

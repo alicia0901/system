@@ -76,8 +76,15 @@ clasp 初回セットアップ(運用担当者アカウントで1回のみ): `np
 - 二重送信防止のため、`SHEET_HEADERS`/`COL` 末尾の `REMINDER_SENT`(リマインダー送信済み)列にカンマ区切りで `'day_before'` / `'same_day'` を記録する。送信対象の判定はこの文字列に対象の kind が含まれているかどうかで行う。
 - `updateReservationAdmin` で予約の日付・時間が変更された場合、この列は空文字にリセットされる(古い日時に対する送信済みフラグを新しい日時にそのまま引き継ぐと、新しい日時への本来必要なリマインダーが誤って送られなくなるため)。日付・時間が変わっていなければ既存値をそのまま維持する。
 - `CONFIG.REMINDER_DAY_BEFORE_ENABLED` / `REMINDER_SAME_DAY_ENABLED` は個別のON/OFFのみを制御し、トリガー自体の有無とは独立している(`false` でもトリガーは残るが、`sendRemindersOfKind` の先頭で何もせず終了する)。
-- 日付の比較には `formatDateStr(date)`(`Utilities.formatDate` を `CONFIG.TIMEZONE` で使うラッパー)を使うこと。既存の `getConfirmedRangesForDate` 等と同様、シートの日付セルは `String(row[COL.DATE])` で文字列として扱う前提になっている。
+- 日付の比較には `formatDateStr(date)`(`Utilities.formatDate` を `CONFIG.TIMEZONE` で使うラッパー)を使うこと。シートの日付・時刻は `'YYYY-MM-DD'` / `'HH:mm'` の文字列として扱う(下記「シートの読み書き」)。
 - 他店舗展開時は、`create-store.js` の再実行や `clasp push` だけではトリガーは複製されない。新規店舗ごとに、その店舗の Apps Script エディタで `setupReminderTrigger` を1回実行する必要がある(README.md 参照)。
+
+### シートの読み書き(自動変換対策)
+
+Google スプレッドシートは文字列で書き込んだ値も自動変換する(`'2026-11-07'` → 日付、`'19:00'` → 時刻、`'09012345678'` → 数値で先頭の0が消える、`=` 始まり → 数式として実行)。日付・時刻を文字列で比較するこのシステムでは、変換されると空席計算・一覧・リマインダーが一致しなくなる(満席でも予約が入る)。
+
+- **書き込み**: お客様の入力・コース名など文字として残したい値は `textCell(v)`(先頭に `'` を付ける)を通して `appendRow` / `setValues` する。ステータス・人数・Date などの値はそのままでよい。
+- **読み込み**: シートの行は必ず `readAllRows(sheet)` / `readRow(sheet, rowIndex)` で読む(`sheet.getDataRange().getValues()` を直接使わない)。`normalizeRow` が、すでに変換されてしまった古い行の日付・時刻(Date)をシートのタイムゾーンで文字列に戻し、数値になった電話番号の先頭の0を補う。
 
 ### Windows での clasp 呼び出しの注意
 
