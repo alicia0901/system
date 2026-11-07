@@ -69,10 +69,11 @@ const CONFIG = {
   STORE_ADDRESS: '',
 
   // 予約フォームでフリガナ・メールアドレスを必須にするか。
-  // メールアドレスを入力しなかったお客様には確認メール・リマインダーは届かない。
-  // (キャンセル待ちの登録だけは、空席のお知らせを送るためメールアドレスを常に必須とする)
+  // メールアドレスは確認メール・リマインダー(無断キャンセル対策)の送り先になるため既定で必須。
+  // false にすると任意になり、未入力のお客様には確認メール・リマインダーが届かない
+  // (その場合もキャンセル待ちの登録だけは、空席のお知らせを送るためメールアドレス必須)。
   REQUIRE_KANA: false,
-  REQUIRE_EMAIL: false,
+  REQUIRE_EMAIL: true,
 
   // 管理画面(?page=admin)のログインパスワード。必ずデフォルトから変更してください。
   ADMIN_PASSWORD: 'changeme',
@@ -291,7 +292,7 @@ function getConfig() {
     liffId: CONFIG.LIFF_ID || '',
     bookingCutoffMinutes: getBookingCutoffMinutes(),
     requireKana: !!CONFIG.REQUIRE_KANA,
-    requireEmail: !!CONFIG.REQUIRE_EMAIL,
+    requireEmail: isEmailRequired(),
     storePhone: CONFIG.STORE_PHONE || '',
   };
 }
@@ -303,6 +304,14 @@ function getConfig() {
 function getBookingCutoffMinutes() {
   const v = Number(CONFIG.BOOKING_CUTOFF_MINUTES);
   return Number.isFinite(v) && v > 0 ? v : 0;
+}
+
+/**
+ * 予約フォームでメールアドレスを必須にするか。明示的に false にした店舗だけ任意。
+ * CONFIG にキーがない古い店舗コードでは、従来どおり必須とみなす。
+ */
+function isEmailRequired() {
+  return CONFIG.REQUIRE_EMAIL !== false;
 }
 
 /** 締切の分数を「1時間」「30分」「1時間30分」のような表記にする。 */
@@ -374,7 +383,7 @@ function submitBooking(form) {
     if (CONFIG.REQUIRE_KANA && !form.kana) {
       return { success: false, message: 'フリガナを入力してください。' };
     }
-    if (CONFIG.REQUIRE_EMAIL && !form.email) {
+    if (isEmailRequired() && !form.email) {
       return { success: false, message: 'メールアドレスを入力してください。' };
     }
 

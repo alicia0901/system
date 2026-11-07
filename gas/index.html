@@ -581,6 +581,9 @@
       document.getElementById('emailReq').style.display = cfg.requireEmail ? '' : 'none';
       document.getElementById('kana').required = !!cfg.requireKana;
       document.getElementById('email').required = !!cfg.requireEmail;
+      document.getElementById('emailHint').textContent = cfg.requireEmail
+        ? '確認メールと、前日・当日のご案内をお送りします'
+        : '入力すると、確認メールと前日・当日のご案内が届きます';
 
       renderCourseCards(cfg.courses);
     }

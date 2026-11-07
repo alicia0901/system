@@ -17,7 +17,7 @@
   "storePhone": "",
   "storeAddress": "",
   "requireKana": false,
-  "requireEmail": false,
+  "requireEmail": true,
   "adminPassword": "changeme",
   "waitlistEnabled": true,
   "liffId": "",
