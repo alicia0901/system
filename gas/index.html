@@ -387,8 +387,8 @@
         <label>お名前<span class="req">必須</span></label>
         <input type="text" id="name" required>
 
-        <label>フリガナ<span class="req">必須</span></label>
-        <input type="text" id="kana" required>
+        <label>フリガナ<span class="req" id="kanaReq" style="display:none;">必須</span></label>
+        <input type="text" id="kana">
 
         <div class="row2">
           <div>
@@ -396,8 +396,9 @@
             <input type="tel" id="phone" placeholder="090-1234-5678" required>
           </div>
           <div>
-            <label>メールアドレス<span class="req">必須</span></label>
-            <input type="email" id="email" required>
+            <label>メールアドレス<span class="req" id="emailReq" style="display:none;">必須</span></label>
+            <input type="email" id="email">
+            <div id="emailHint" style="font-size:12px; color:#888; margin-top:4px;">入力すると、確認メールと前日・当日のご案内が届きます</div>
           </div>
         </div>
 
@@ -414,7 +415,7 @@
 
     <div class="done-box" id="doneBox" style="display:none;">
       <div class="big" id="doneIcon"></div>
-      <div id="doneMsg" style="margin-top:8px; font-weight:bold;"></div>
+      <div id="doneMsg" style="margin-top:8px; font-weight:bold; white-space:pre-line;"></div>
       <button id="lineCloseBtn" type="button">LINEのトーク画面に戻る</button>
     </div>
   </div>
@@ -576,6 +577,11 @@
       maxDate.setDate(maxDate.getDate() + cfg.maxDaysAhead);
       document.getElementById('date').max = toDateStr(maxDate);
 
+      document.getElementById('kanaReq').style.display = cfg.requireKana ? '' : 'none';
+      document.getElementById('emailReq').style.display = cfg.requireEmail ? '' : 'none';
+      document.getElementById('kana').required = !!cfg.requireKana;
+      document.getElementById('email').required = !!cfg.requireEmail;
+
       renderCourseCards(cfg.courses);
     }
 
@@ -719,9 +725,11 @@
       var duration = courseDef ? courseDef.duration : CFG.slotMinutes;
       var slot = CFG.slotMinutes;
 
-      var now = new Date();
-      var isToday = (dateStr === toDateStr(now));
-      var nowMin = now.getHours() * 60 + now.getMinutes();
+      // 受付締切(来店の何分前まで)を過ぎた時間帯は選べないようにする。
+      // 日付をまたぐ締切にも対応するため、各枠の日時そのものと比べる。
+      var dateParts = dateStr.split('-').map(Number);
+      var cutoffMs = (CFG.bookingCutoffMinutes || 0) * 60000;
+      var acceptFromMs = Date.now() + cutoffMs;
 
       var any = false;
       (schedule.periods || []).forEach(function (period) {
@@ -734,7 +742,8 @@
           }, 0);
           var remaining = CFG.seatsTotal - reservedAtSlot;
           var isFull = remaining < partySize;
-          var isPast = isToday && t <= nowMin;
+          var slotMs = new Date(dateParts[0], dateParts[1] - 1, dateParts[2], Math.floor(t / 60), t % 60).getTime();
+          var isPast = slotMs < acceptFromMs;
           var isWaitlistable = isFull && !isPast && CFG.waitlistEnabled;
           var isSelectable = !isPast && (!isFull || isWaitlistable);
 
@@ -766,6 +775,10 @@
     function updateSubmitUi() {
       var note = document.getElementById('waitlistNote');
       note.style.display = selectedIsWaitlist ? 'flex' : 'none';
+      // キャンセル待ちは空席のお知らせをメールで送るため、メールアドレスを必須として表示する
+      var emailRequired = !!(CFG && CFG.requireEmail) || selectedIsWaitlist;
+      document.getElementById('emailReq').style.display = emailRequired ? '' : 'none';
+      document.getElementById('email').required = emailRequired;
       setSubmitButtonState(selectedIsWaitlist);
     }
 
@@ -798,9 +811,15 @@
         lineDisplayName: lineProfile ? lineProfile.displayName : '',
       };
 
-      if (!form.name || !form.kana || !form.phone || !form.email || !form.date || !form.time || !form.course || !form.partySize) {
+      if (!form.name || !form.phone || !form.date || !form.time || !form.course || !form.partySize ||
+          (CFG.requireKana && !form.kana) || (CFG.requireEmail && !form.email)) {
         msg.className = 'error';
         msg.textContent = '必須項目を入力し、予約時間を選択してください。';
+        return;
+      }
+      if (form.acceptWaitlist && !form.email) {
+        msg.className = 'error';
+        msg.textContent = 'キャンセル待ちの登録には、空きのお知らせをお送りするメールアドレスが必要です。';
         return;
       }
 

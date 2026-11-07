@@ -43,6 +43,10 @@ const CONFIG = {
   // 何日先まで予約可能にするか
   MAX_DAYS_AHEAD: 60,
 
+  // ネット予約の受付締切: 来店時刻の何分前まで受け付けるか(0 なら直前まで受け付ける)。
+  // 管理画面からの手動登録には適用しない。
+  BOOKING_CUTOFF_MINUTES: 60,
+
   // 総座席数。時間帯ごとの空席はこの数字を基準に自動計算されます。
   SEATS_TOTAL: 20,
 
@@ -58,6 +62,17 @@ const CONFIG = {
 
   // 予約が入るたびに店舗側にも通知メールを送る宛先(空文字にすると送らない)
   NOTIFY_EMAIL: '',
+
+  // お店の電話番号・住所。お客様向けメールと予約完了画面に
+  // 「変更・キャンセルはお電話で」の案内として載せる(空文字なら載せない)。
+  STORE_PHONE: '',
+  STORE_ADDRESS: '',
+
+  // 予約フォームでフリガナ・メールアドレスを必須にするか。
+  // メールアドレスを入力しなかったお客様には確認メール・リマインダーは届かない。
+  // (キャンセル待ちの登録だけは、空席のお知らせを送るためメールアドレスを常に必須とする)
+  REQUIRE_KANA: false,
+  REQUIRE_EMAIL: false,
 
   // 管理画面(?page=admin)のログインパスワード。必ずデフォルトから変更してください。
   ADMIN_PASSWORD: 'changeme',
@@ -109,6 +124,10 @@ const ROUTE_STAFF = '電話等(手動登録)';
 const STATUS_CONFIRMED = '予約確定';
 const STATUS_CANCELLED = 'キャンセル';
 const STATUS_WAITLIST = 'キャンセル待ち';
+// 来店予定時刻を過ぎても連絡なく来店しなかった予約。管理画面から手動で記録する
+// (確定予約に対してのみ。座席の集計・リマインダー・空席通知の対象外)
+const STATUS_NOSHOW = '無断キャンセル';
+const NOSHOW_TITLE_PREFIX = '【無断キャンセル】';
 
 // 管理画面ログインのセッション有効期間(秒)
 const ADMIN_SESSION_TTL_SEC = 6 * 60 * 60; // 6時間
@@ -270,8 +289,47 @@ function getConfig() {
     partySizeMax: CONFIG.PARTY_SIZE_MAX,
     waitlistEnabled: !!CONFIG.WAITLIST_ENABLED,
     liffId: CONFIG.LIFF_ID || '',
+    bookingCutoffMinutes: getBookingCutoffMinutes(),
+    requireKana: !!CONFIG.REQUIRE_KANA,
+    requireEmail: !!CONFIG.REQUIRE_EMAIL,
+    storePhone: CONFIG.STORE_PHONE || '',
   };
 }
+
+/**
+ * ネット予約の受付締切(来店の何分前まで受け付けるか)。
+ * CONFIG にキーがない古い店舗コードでは 0(直前まで受付 = 従来どおり)とみなす。
+ */
+function getBookingCutoffMinutes() {
+  const v = Number(CONFIG.BOOKING_CUTOFF_MINUTES);
+  return Number.isFinite(v) && v > 0 ? v : 0;
+}
+
+/** 締切の分数を「1時間」「30分」「1時間30分」のような表記にする。 */
+function formatCutoffLabel(minutes) {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return (h ? h + '時間' : '') + (m ? m + '分' : '');
+}
+
+/**
+ * お客様向けメールの末尾に付ける、お店の連絡先と変更・キャンセル方法の案内。
+ * @param {string} lead 連絡先の前に置く一文
+ */
+function buildStoreContactLines(lead) {
+  const lines = ['', '──────────────'];
+  if (CONFIG.STORE_PHONE) {
+    lines.push(lead, 'TEL: ' + CONFIG.STORE_PHONE);
+  } else {
+    lines.push('ご予約の変更・キャンセルは、お手数ですがお店までご連絡ください。');
+  }
+  if (CONFIG.STORE_ADDRESS) lines.push('住所: ' + CONFIG.STORE_ADDRESS);
+  lines.push('', CONFIG.STORE_NAME || '');
+  return lines;
+}
+
+const CONTACT_LEAD_DEFAULT = 'ご予約の変更・キャンセルは、お手数ですがお電話でご連絡ください。';
+const CONTACT_LEAD_REMINDER = 'ご都合が悪くなった場合は、お手数ですが事前にお電話でご連絡ください。';
 
 /**
  * 指定日の予約状況を返す (フロントで空席のある時間帯の表示に使う)
@@ -310,8 +368,14 @@ function submitBooking(form) {
     }
 
     // ---- 入力チェック ----
-    if (!form || !form.name || !form.kana || !form.phone || !form.email || !form.date || !form.time || !form.course || !form.partySize) {
+    if (!form || !form.name || !form.phone || !form.date || !form.time || !form.course || !form.partySize) {
       return { success: false, message: '必須項目が入力されていません。' };
+    }
+    if (CONFIG.REQUIRE_KANA && !form.kana) {
+      return { success: false, message: 'フリガナを入力してください。' };
+    }
+    if (CONFIG.REQUIRE_EMAIL && !form.email) {
+      return { success: false, message: 'メールアドレスを入力してください。' };
     }
 
     // ---- 簡易連投対策(同じ電話番号からの短時間の連続送信をブロック) ----
@@ -340,6 +404,16 @@ function submitBooking(form) {
     const now = new Date();
     if (start.getTime() < now.getTime()) {
       return { success: false, message: '過去の日時は予約できません。' };
+    }
+
+    // ---- 受付締切チェック(直前の予約を防ぐ) ----
+    const cutoffMin = getBookingCutoffMinutes();
+    if (cutoffMin > 0 && start.getTime() - now.getTime() < cutoffMin * 60000) {
+      return {
+        success: false,
+        message: 'ネット予約はご来店の' + formatCutoffLabel(cutoffMin) + '前までです。' +
+          (CONFIG.STORE_PHONE ? 'お急ぎの場合はお電話(' + CONFIG.STORE_PHONE + ')でお問い合わせください。' : '別の時間をお選びください。'),
+      };
     }
 
     // ---- 予約可能日数チェック ----
@@ -373,6 +447,10 @@ function submitBooking(form) {
     if (isFull) {
       // 満席でも、キャンセル待ちの受付が有効かつお客様が希望していれば登録する
       if (CONFIG.WAITLIST_ENABLED && form.acceptWaitlist) {
+        if (!form.email) {
+          // 空席のお知らせはメールで送るため、キャンセル待ちだけはメールアドレス必須
+          return { success: false, message: 'キャンセル待ちの登録には、空きのお知らせをお送りするメールアドレスが必要です。' };
+        }
         const waitlistSheet = getOrCreateSheet();
         waitlistSheet.appendRow([
           new Date(),
@@ -452,7 +530,8 @@ function submitBooking(form) {
 
     return {
       success: true,
-      message: form.date + ' ' + form.time + ' から ' + partySize + '名様「' + form.course + '」でのご予約が完了しました!当日を楽しみにお待ちしております♪',
+      message: form.date + ' ' + form.time + ' から ' + partySize + '名様「' + form.course + '」でのご予約が完了しました!当日を楽しみにお待ちしております♪' +
+        (CONFIG.STORE_PHONE ? '\n\nご予約の変更・キャンセルは、お電話(' + CONFIG.STORE_PHONE + ')でご連絡ください。' : ''),
     };
   } catch (err) {
     return { success: false, message: 'エラーが発生しました: ' + err.message };
@@ -488,6 +567,8 @@ function getReservationsForAdmin(token, dateStr) {
   const reservations = [];
   let reservedSeats = 0;
   let waitlistCount = 0;
+  // 無断キャンセルの記録は当日以降(来店予定日を迎えた予約)にだけ許可する
+  const isTodayOrPast = dateStr <= formatDateStr(new Date());
 
   for (let r = 1; r < values.length; r++) {
     const row = values[r];
@@ -508,6 +589,7 @@ function getReservationsForAdmin(token, dateStr) {
       status: status,
       route: row[COL.ROUTE] || ROUTE_WEB,
       lineDisplayName: row[COL.LINE_NAME] || '',
+      canMarkNoShow: status === STATUS_CONFIRMED && isTodayOrPast,
     });
   }
 
@@ -713,6 +795,9 @@ function updateReservationAdmin(token, rowIndex, form) {
     const status = row[COL.STATUS]; // ステータス自体は変更しない
     if (status === STATUS_CANCELLED) {
       return { success: false, message: 'キャンセル済みの予約は変更できません。' };
+    }
+    if (status === STATUS_NOSHOW) {
+      return { success: false, message: '無断キャンセルとして記録済みの予約は変更できません(先に記録を取り消してください)。' };
     }
 
     if (!form || !form.name || !form.phone || !form.date || !form.time || !form.course || !form.partySize) {
@@ -930,6 +1015,9 @@ function cancelReservationAdmin(token, rowIndex) {
     if (row[COL.STATUS] === STATUS_CANCELLED) {
       return { success: false, message: 'この予約は既にキャンセル済みです。' };
     }
+    if (row[COL.STATUS] === STATUS_NOSHOW) {
+      return { success: false, message: 'この予約は無断キャンセルとして記録済みです(キャンセルにする場合は、先に記録を取り消してください)。' };
+    }
 
     const wasConfirmed = row[COL.STATUS] === STATUS_CONFIRMED;
     const dateStr = String(row[COL.DATE]);
@@ -950,6 +1038,68 @@ function cancelReservationAdmin(token, rowIndex) {
     // 確定していた予約のキャンセルで座席に空きが出た場合、その日のキャンセル待ちへ通知する
     if (wasConfirmed) {
       notifyWaitlistOfOpening(dateStr);
+    }
+
+    return { success: true };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * 管理画面: 確定予約を「無断キャンセル」として記録する(undo=true で記録を取り消し、予約確定に戻す)。要ログイン。
+ * 来店予定日を迎えた(当日以降の)予約だけが対象。カレンダーの予定は記録として残し、
+ * タイトルの先頭に「【無断キャンセル】」を付け外しする。空席通知は行わない(当日以降のため)。
+ * @param {string} token
+ * @param {number} rowIndex シート上の行番号
+ * @param {boolean} undo
+ */
+function markNoShowAdmin(token, rowIndex, undo) {
+  if (!isValidAdminToken(token)) {
+    return { success: false, authError: true, message: 'ログインの有効期限が切れました。再度ログインしてください。' };
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const sheet = getOrCreateSheet();
+    const row = sheet.getRange(rowIndex, 1, 1, SHEET_HEADERS.length).getValues()[0];
+    if (!row || !row[COL.NAME]) {
+      return { success: false, message: '対象の予約が見つかりません。' };
+    }
+
+    const status = row[COL.STATUS];
+    if (undo) {
+      if (status !== STATUS_NOSHOW) {
+        return { success: false, message: 'この予約は無断キャンセルとして記録されていません。' };
+      }
+    } else {
+      if (status !== STATUS_CONFIRMED) {
+        return { success: false, message: '無断キャンセルとして記録できるのは、確定済みの予約だけです。' };
+      }
+      if (String(row[COL.DATE]) > formatDateStr(new Date())) {
+        return { success: false, message: 'ご来店予定日より前の予約は、無断キャンセルとして記録できません。' };
+      }
+    }
+
+    sheet.getRange(rowIndex, COL.STATUS + 1).setValue(undo ? STATUS_CONFIRMED : STATUS_NOSHOW);
+
+    const eventId = row[COL.EVENT_ID];
+    if (eventId) {
+      try {
+        const calendar = CalendarApp.getCalendarById(CONFIG.CALENDAR_ID);
+        const event = calendar.getEventById(eventId);
+        if (event) {
+          const title = event.getTitle();
+          if (undo && title.indexOf(NOSHOW_TITLE_PREFIX) === 0) {
+            event.setTitle(title.slice(NOSHOW_TITLE_PREFIX.length));
+          } else if (!undo && title.indexOf(NOSHOW_TITLE_PREFIX) !== 0) {
+            event.setTitle(NOSHOW_TITLE_PREFIX + title);
+          }
+        }
+      } catch (calErr) {
+        Logger.log('カレンダー更新エラー: ' + calErr.message);
+      }
     }
 
     return { success: true };
@@ -1147,6 +1297,7 @@ function getStatsForAdmin(token, fromDate, toDate) {
   let confirmedCount = 0;
   let confirmedPeople = 0;
   let cancelledCount = 0;
+  let noShowCount = 0;
   let waitlistCount = 0;
 
   for (let r = 1; r < values.length; r++) {
@@ -1161,13 +1312,17 @@ function getStatsForAdmin(token, fromDate, toDate) {
       confirmedPeople += partySize;
     } else if (status === STATUS_CANCELLED) {
       cancelledCount++;
+    } else if (status === STATUS_NOSHOW) {
+      noShowCount++;
     } else if (status === STATUS_WAITLIST) {
       waitlistCount++;
     }
   }
 
-  const totalForRate = confirmedCount + cancelledCount;
+  // 率の分母は「一度は確定した予約」全体(確定のまま・キャンセル・無断キャンセル)
+  const totalForRate = confirmedCount + cancelledCount + noShowCount;
   const cancelRate = totalForRate > 0 ? cancelledCount / totalForRate : 0;
+  const noShowRate = totalForRate > 0 ? noShowCount / totalForRate : 0;
   const avgPartySize = confirmedCount > 0 ? confirmedPeople / confirmedCount : 0;
 
   return {
@@ -1178,6 +1333,8 @@ function getStatsForAdmin(token, fromDate, toDate) {
     confirmedPeople: confirmedPeople,
     cancelledCount: cancelledCount,
     cancelRate: cancelRate,
+    noShowCount: noShowCount,
+    noShowRate: noShowRate,
     avgPartySize: avgPartySize,
     waitlistCount: waitlistCount,
   };
@@ -1251,7 +1408,12 @@ function sumOverlappingPartySize(ranges, startMin, endMin) {
   }, 0);
 }
 
-function buildBookingEmailBody(form, partySize) {
+/**
+ * @param {Object} form
+ * @param {number} partySize
+ * @param {boolean} forCustomer true ならお客様向けとして末尾にお店の連絡先と変更・キャンセル方法を載せる
+ */
+function buildBookingEmailBody(form, partySize, forCustomer) {
   const lines = [
     (form.name || '') + ' 様',
     '',
@@ -1270,10 +1432,13 @@ function buildBookingEmailBody(form, partySize) {
     '━━━━━━━━━━━━━━━',
     '',
     'スタッフ一同、心を込めてお迎えの準備をしてお待ちしております。',
-    '当日お会いできる日を、私たちもとても楽しみにしています!',
-    '',
-    (CONFIG.STORE_NAME || '')
+    '当日お会いできる日を、私たちもとても楽しみにしています!'
   );
+  if (forCustomer) {
+    Array.prototype.push.apply(lines, buildStoreContactLines(CONTACT_LEAD_DEFAULT));
+  } else {
+    lines.push('', CONFIG.STORE_NAME || '');
+  }
   return lines.join('\n');
 }
 
@@ -1281,7 +1446,7 @@ function sendCustomerConfirmationEmail(form, partySize) {
   if (!form.email) return;
   try {
     const subject = '[' + (CONFIG.STORE_NAME || 'ご予約') + '] ご予約確認 (' + form.date + ' ' + form.time + ')';
-    MailApp.sendEmail(form.email, subject, buildBookingEmailBody(form, partySize));
+    MailApp.sendEmail(form.email, subject, buildBookingEmailBody(form, partySize, true));
   } catch (err) {
     Logger.log('お客様への確認メール送信エラー: ' + err.message);
   }
@@ -1293,7 +1458,7 @@ function sendBookingEmails(form, partySize) {
   if (CONFIG.NOTIFY_EMAIL) {
     try {
       const staffSubject = '[新規予約] ' + form.date + ' ' + form.time + ' ' + form.name + '様 ' + partySize + '名';
-      MailApp.sendEmail(CONFIG.NOTIFY_EMAIL, staffSubject, buildBookingEmailBody(form, partySize) + '\n\n電話番号: ' + form.phone);
+      MailApp.sendEmail(CONFIG.NOTIFY_EMAIL, staffSubject, buildBookingEmailBody(form, partySize, false) + '\n\n電話番号: ' + form.phone);
     } catch (err) {
       Logger.log('店舗への通知メール送信エラー: ' + err.message);
     }
@@ -1314,8 +1479,9 @@ function sendWaitlistRegisteredEmail(form, partySize) {
         'コース: ' + form.course,
         '',
         '空きが出た場合、折り返しご連絡いたします。恐れ入りますが、そのままお待ちください。',
-        (CONFIG.STORE_NAME || ''),
-      ].filter(function (s) { return s !== ''; }).join('\n');
+      ].filter(function (s) { return s !== ''; })
+        .concat(buildStoreContactLines('キャンセル待ちの取り消しは、お手数ですがお電話でご連絡ください。'))
+        .join('\n');
       MailApp.sendEmail(form.email, subject, body);
     } catch (err) {
       Logger.log('キャンセル待ち登録メール送信エラー: ' + err.message);
@@ -1352,9 +1518,7 @@ function sendWaitlistPromotedEmail(form, partySize) {
       '',
       'スタッフ一同、心を込めてお迎えの準備をしてお待ちしております。',
       '当日お会いできる日を、私たちもとても楽しみにしています!',
-      '',
-      (CONFIG.STORE_NAME || ''),
-    ].join('\n');
+    ].concat(buildStoreContactLines(CONTACT_LEAD_DEFAULT)).join('\n');
     MailApp.sendEmail(form.email, subject, body);
   } catch (err) {
     Logger.log('繰り上げ確定メール送信エラー: ' + err.message);
@@ -1437,11 +1601,9 @@ function sendWaitlistOpeningEmail(form, partySize) {
       'コース: ' + form.course,
       '━━━━━━━━━━━━━━━',
       '',
-      '席数に限りがあり、先着順のご案内となります。ご希望の場合はお早めにお電話にてご連絡ください。',
+      '席数に限りがあり、先着順のご案内となります。',
       '(このメールは空きが出たお知らせであり、まだご予約が確定したものではありません)',
-      '',
-      (CONFIG.STORE_NAME || ''),
-    ].join('\n');
+    ].concat(buildStoreContactLines('ご希望の場合は、お早めにお電話でご連絡ください。')).join('\n');
     MailApp.sendEmail(form.email, subject, body);
   } catch (err) {
     Logger.log('空席通知メール送信エラー: ' + err.message);
@@ -1539,9 +1701,7 @@ function sendReminderEmail(form, partySize, kind) {
       '人数: ' + partySize + '名',
       'コース: ' + form.course,
       '━━━━━━━━━━━━━━━',
-      '',
-      (CONFIG.STORE_NAME || ''),
-    ].join('\n');
+    ].concat(buildStoreContactLines(CONTACT_LEAD_REMINDER)).join('\n');
     MailApp.sendEmail(form.email, subject, body);
   } catch (err) {
     Logger.log('リマインダーメール送信エラー: ' + err.message);
