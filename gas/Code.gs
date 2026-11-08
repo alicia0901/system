@@ -68,6 +68,10 @@ const CONFIG = {
   STORE_PHONE: '',
   STORE_ADDRESS: '',
 
+  // お店のプライバシーポリシー(個人情報の取り扱い)ページのURL。設定すると予約フォームの
+  // 利用目的の案内にリンクを表示する(https:// で始まるURLのみ。空文字ならリンクなし)。
+  PRIVACY_POLICY_URL: '',
+
   // 予約フォームでフリガナ・メールアドレスを必須にするか(どちらも既定で必須)。
   // フリガナは来店時の受付や電話での確認で読み方が分からないと困るため必須。
   // メールアドレスは確認メール・リマインダー(無断キャンセル対策)の送り先になるため必須。
@@ -155,6 +159,15 @@ const BUSINESS_HOURS_PROPERTY_KEY = 'BUSINESS_HOURS_OVERRIDE';
 // キャンセル待ちへの空席通知メール、1回のキャンセル処理につき送る上限件数
 // (登録順の先着何件かに絞ることで、通知殺到を避ける)
 const WAITLIST_NOTIFY_MAX_PER_RUN = 5;
+
+// メール送信の失敗を記録するシートと、管理画面での表示に使う設定。
+// 送信失敗は MailApp の例外(1日の送信上限超過・宛先不正など)を握りつぶさず、このシートに残して
+// 管理画面に表示する(確認メールやリマインダーが届いていないことに店舗が気づけるようにするため)。
+const MAIL_ERROR_SHEET_NAME = 'メール送信エラー';
+const MAIL_ERROR_HEADERS = ['日時', '種類', '宛先', '件名', 'エラー内容'];
+const MAIL_ERRORS_ACK_KEY = 'MAIL_ERRORS_ACK_AT'; // 管理画面で「確認済み」にした日時(ミリ秒)
+const MAIL_ISSUE_LOOKBACK_DAYS = 7;
+const MAIL_QUOTA_WARN_THRESHOLD = 10; // その日の残り送信可能数がこれ未満なら管理画面で注意を出す
 
 // ==================== Web App エントリポイント ====================
 
@@ -304,6 +317,7 @@ function getConfig() {
     requireKana: isKanaRequired(),
     requireEmail: isEmailRequired(),
     storePhone: CONFIG.STORE_PHONE || '',
+    privacyPolicyUrl: /^https:\/\//.test(CONFIG.PRIVACY_POLICY_URL || '') ? CONFIG.PRIVACY_POLICY_URL : '',
   };
 }
 
@@ -606,11 +620,106 @@ function adminLogin(password) {
   }
 }
 
+// ==================== メール送信(失敗の記録つき) ====================
+
+/**
+ * メールを送る。失敗(1日の送信上限・宛先不正など)しても例外は投げず、
+ * 「メール送信エラー」シートに記録して false を返す。メール送信は必ずこの関数を通すこと。
+ * @param {string} kind 管理画面・エラーシートに表示する種類('予約確認' など)
+ * @return {boolean} 送信できたら true
+ */
+function sendMail(kind, to, subject, body) {
+  try {
+    if (MailApp.getRemainingDailyQuota() <= 0) {
+      throw new Error('本日のメール送信上限に達したため送信できませんでした');
+    }
+    MailApp.sendEmail(to, subject, body);
+    return true;
+  } catch (err) {
+    Logger.log('メール送信エラー(' + kind + '): ' + err.message);
+    recordMailError(kind, to, subject, err.message);
+    return false;
+  }
+}
+
+function recordMailError(kind, to, subject, message) {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let sheet = ss.getSheetByName(MAIL_ERROR_SHEET_NAME);
+    if (!sheet) {
+      sheet = ss.insertSheet(MAIL_ERROR_SHEET_NAME);
+      sheet.appendRow(MAIL_ERROR_HEADERS);
+      sheet.setFrozenRows(1);
+    }
+    // 件名にはお客様の名前が入るため、数式として実行されないよう文字として保存する
+    sheet.appendRow([new Date(), textCell(kind), textCell(to), textCell(subject), textCell(message)]);
+  } catch (e) {
+    Logger.log('メール送信エラーの記録に失敗: ' + e.message);
+  }
+}
+
+/**
+ * 管理画面: 直近のメール送信エラー(「確認済み」より後のもの)と、本日の残り送信可能数を返す。要ログイン。
+ */
+function getMailIssuesForAdmin(token) {
+  if (!isValidAdminToken(token)) {
+    return { success: false, authError: true, message: 'ログインの有効期限が切れました。再度ログインしてください。' };
+  }
+
+  const ackAt = Number(PropertiesService.getScriptProperties().getProperty(MAIL_ERRORS_ACK_KEY)) || 0;
+  const since = Math.max(ackAt, Date.now() - MAIL_ISSUE_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
+
+  let count = 0;
+  let latest = null;
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(MAIL_ERROR_SHEET_NAME);
+  if (sheet) {
+    // 予約シートとは列構成が違うため readAllRows は使わない(1列目は Date で書き込んでいる)
+    const values = sheet.getDataRange().getValues();
+    for (let r = 1; r < values.length; r++) {
+      const at = values[r][0];
+      const atMs = at instanceof Date || Object.prototype.toString.call(at) === '[object Date]' ? at.getTime() : NaN;
+      if (!(atMs > since)) continue;
+      count++;
+      latest = {
+        at: Utilities.formatDate(at, getSheetTimeZone(), 'yyyy/MM/dd HH:mm'),
+        kind: String(values[r][1]),
+        to: String(values[r][2]),
+        error: String(values[r][4]),
+      };
+    }
+  }
+
+  let remainingQuota = null;
+  try {
+    remainingQuota = MailApp.getRemainingDailyQuota();
+  } catch (e) {
+    Logger.log('送信可能数の取得に失敗: ' + e.message);
+  }
+
+  return {
+    success: true,
+    count: count,
+    latest: latest,
+    remainingQuota: remainingQuota,
+    quotaLow: remainingQuota !== null && remainingQuota < MAIL_QUOTA_WARN_THRESHOLD,
+  };
+}
+
+/** 管理画面: 表示中のメール送信エラーを「確認済み」にする(以後はそれより新しいエラーだけを表示)。要ログイン。 */
+function ackMailIssuesAdmin(token) {
+  if (!isValidAdminToken(token)) {
+    return { success: false, authError: true, message: 'ログインの有効期限が切れました。再度ログインしてください。' };
+  }
+  PropertiesService.getScriptProperties().setProperty(MAIL_ERRORS_ACK_KEY, String(Date.now()));
+  return { success: true };
+}
+
 /** ログインのロックが始まったことを店舗の通知先メールへ知らせる(通知先が未設定なら何もしない)。 */
 function notifyAdminLoginLocked() {
   if (!CONFIG.NOTIFY_EMAIL) return;
   try {
-    MailApp.sendEmail(
+    sendMail(
+      '店舗通知(管理画面ロック)',
       CONFIG.NOTIFY_EMAIL,
       '[' + (CONFIG.STORE_NAME || '予約システム') + '] 管理画面のログインを一時ロックしました',
       '管理画面へのログインに' + ADMIN_LOGIN_MAX_FAILURES + '回続けて失敗したため、' +
@@ -1575,7 +1684,7 @@ function sendCustomerConfirmationEmail(form, partySize) {
   if (!form.email) return;
   try {
     const subject = '[' + (CONFIG.STORE_NAME || 'ご予約') + '] ご予約確認 (' + form.date + ' ' + form.time + ')';
-    MailApp.sendEmail(form.email, subject, buildBookingEmailBody(form, partySize, true));
+    sendMail('予約確認', form.email, subject, buildBookingEmailBody(form, partySize, true));
   } catch (err) {
     Logger.log('お客様への確認メール送信エラー: ' + err.message);
   }
@@ -1587,7 +1696,7 @@ function sendBookingEmails(form, partySize) {
   if (CONFIG.NOTIFY_EMAIL) {
     try {
       const staffSubject = '[新規予約] ' + form.date + ' ' + form.time + ' ' + form.name + '様 ' + partySize + '名';
-      MailApp.sendEmail(CONFIG.NOTIFY_EMAIL, staffSubject, buildBookingEmailBody(form, partySize, false) + '\n\n電話番号: ' + form.phone);
+      sendMail('店舗通知(新規予約)', CONFIG.NOTIFY_EMAIL, staffSubject, buildBookingEmailBody(form, partySize, false) + '\n\n電話番号: ' + form.phone);
     } catch (err) {
       Logger.log('店舗への通知メール送信エラー: ' + err.message);
     }
@@ -1611,7 +1720,7 @@ function sendWaitlistRegisteredEmail(form, partySize) {
       ].filter(function (s) { return s !== ''; })
         .concat(buildStoreContactLines('キャンセル待ちの取り消しは、お手数ですがお電話でご連絡ください。'))
         .join('\n');
-      MailApp.sendEmail(form.email, subject, body);
+      sendMail('キャンセル待ち登録', form.email, subject, body);
     } catch (err) {
       Logger.log('キャンセル待ち登録メール送信エラー: ' + err.message);
     }
@@ -1620,7 +1729,7 @@ function sendWaitlistRegisteredEmail(form, partySize) {
   if (CONFIG.NOTIFY_EMAIL) {
     try {
       const staffSubject = '[キャンセル待ち登録] ' + form.date + ' ' + form.time + ' ' + form.name + '様 ' + partySize + '名';
-      MailApp.sendEmail(CONFIG.NOTIFY_EMAIL, staffSubject, '電話番号: ' + form.phone);
+      sendMail('店舗通知(キャンセル待ち)', CONFIG.NOTIFY_EMAIL, staffSubject, '電話番号: ' + form.phone);
     } catch (err) {
       Logger.log('店舗への通知メール送信エラー: ' + err.message);
     }
@@ -1648,7 +1757,7 @@ function sendWaitlistPromotedEmail(form, partySize) {
       'スタッフ一同、心を込めてお迎えの準備をしてお待ちしております。',
       '当日お会いできる日を、私たちもとても楽しみにしています!',
     ].concat(buildStoreContactLines(CONTACT_LEAD_DEFAULT)).join('\n');
-    MailApp.sendEmail(form.email, subject, body);
+    sendMail('繰り上げ確定', form.email, subject, body);
   } catch (err) {
     Logger.log('繰り上げ確定メール送信エラー: ' + err.message);
   }
@@ -1704,7 +1813,7 @@ function notifyWaitlistOfOpening(dateStr) {
 
   if (anyNotified && CONFIG.NOTIFY_EMAIL) {
     try {
-      MailApp.sendEmail(CONFIG.NOTIFY_EMAIL, '[空席通知] ' + dateStr + ' のキャンセル待ちへ通知しました',
+      sendMail('店舗通知(空席通知)', CONFIG.NOTIFY_EMAIL, '[空席通知] ' + dateStr + ' のキャンセル待ちへ通知しました',
         dateStr + ' に空きが出たため、キャンセル待ちのお客様(' + notifiedCount + '件)へ空席通知メールを送信しました。\n' +
         '繰り上げ確定は管理画面から行ってください。');
     } catch (err) {
@@ -1733,7 +1842,7 @@ function sendWaitlistOpeningEmail(form, partySize) {
       '席数に限りがあり、先着順のご案内となります。',
       '(このメールは空きが出たお知らせであり、まだご予約が確定したものではありません)',
     ].concat(buildStoreContactLines('ご希望の場合は、お早めにお電話でご連絡ください。')).join('\n');
-    MailApp.sendEmail(form.email, subject, body);
+    sendMail('空席のお知らせ', form.email, subject, body);
   } catch (err) {
     Logger.log('空席通知メール送信エラー: ' + err.message);
   }
@@ -1799,7 +1908,8 @@ function sendRemindersOfKind(kind) {
       };
       const partySize = Number(row[COL.PARTY_SIZE]) || 0;
 
-      sendReminderEmail(form, partySize, kind);
+      // 送れたときだけ送信済みにする(失敗は「メール送信エラー」シートに記録され、管理画面に表示される)
+      if (!sendReminderEmail(form, partySize, kind)) continue;
 
       const newFlags = (sentFlags ? sentFlags + ',' : '') + kind;
       sheet.getRange(r + 1, COL.REMINDER_SENT + 1).setValue(newFlags);
@@ -1809,8 +1919,9 @@ function sendRemindersOfKind(kind) {
   }
 }
 
+/** @return {boolean} 送信できたら true(送信済みの印はこの結果で付ける) */
 function sendReminderEmail(form, partySize, kind) {
-  if (!form.email) return;
+  if (!form.email) return false;
   try {
     const isDayBefore = kind === REMINDER_KIND_DAY_BEFORE;
     const subject = '[' + (CONFIG.STORE_NAME || 'ご予約') + '] ' + (isDayBefore ? '明日' : '本日') + 'のご予約のご案内 (' + form.date + ' ' + form.time + ')';
@@ -1831,9 +1942,10 @@ function sendReminderEmail(form, partySize, kind) {
       'コース: ' + form.course,
       '━━━━━━━━━━━━━━━',
     ].concat(buildStoreContactLines(CONTACT_LEAD_REMINDER)).join('\n');
-    MailApp.sendEmail(form.email, subject, body);
+    return sendMail(isDayBefore ? '前日リマインダー' : '当日リマインダー', form.email, subject, body);
   } catch (err) {
-    Logger.log('リマインダーメール送信エラー: ' + err.message);
+    Logger.log('リマインダーメール作成エラー: ' + err.message);
+    return false;
   }
 }
 

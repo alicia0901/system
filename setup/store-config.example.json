@@ -16,6 +16,7 @@
   "notifyEmail": "",
   "storePhone": "",
   "storeAddress": "",
+  "privacyPolicyUrl": "",
   "requireKana": true,
   "requireEmail": true,
   "adminPassword": "changeme",

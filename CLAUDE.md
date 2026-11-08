@@ -51,6 +51,10 @@ clasp 初回セットアップ(運用担当者アカウントで1回のみ): `np
 
 **座席管理はテーブル単位ではなく総座席数ベース**: 各予約はコースの `duration`(滞在時間)分だけ `SEATS_TOTAL` を占有するとみなし、重なる時間帯の人数合計で空席を判定する(テーブル数・席種を分けた最適化は行わない設計)。
 
+### メール送信(失敗の記録)
+
+メールは必ず `sendMail(kind, to, subject, body)` で送る(`MailApp.sendEmail` を直接呼ばない)。送信前に `MailApp.getRemainingDailyQuota()` を確認し、失敗しても例外は投げず、`MAIL_ERROR_SHEET_NAME`(「メール送信エラー」)シートに日時・種類・宛先・件名・エラー内容を記録して `false` を返す。管理画面は `getMailIssuesForAdmin` で直近 `MAIL_ISSUE_LOOKBACK_DAYS` 日(かつ `ackMailIssuesAdmin` で「確認済み」にした日時 `MAIL_ERRORS_ACK_KEY` より後)の件数・最新のエラーと残り送信可能数を取得し、上部にお知らせを出す。リマインダーは `sendReminderEmail` が `true` を返したときだけ `REMINDER_SENT` に記録する。
+
 ### お客様向けメールの連絡先案内
 
 お客様向けのメール(確認・前日/当日リマインダー・キャンセル待ち登録・繰り上げ確定・空席通知)は、末尾を必ず `buildStoreContactLines(lead)` で組み立てる。`CONFIG.STORE_PHONE` / `STORE_ADDRESS` があれば電話番号・住所と変更・キャンセル方法を、なければ一般的な案内文を載せる。店舗向け通知メールには付けない(`buildBookingEmailBody(form, partySize, forCustomer)` の第3引数)。新しいお客様向けメールを追加するときも同じ関数を使うこと。
