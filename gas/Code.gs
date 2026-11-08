@@ -43,6 +43,10 @@ const CONFIG = {
   // 何日先まで予約可能にするか
   MAX_DAYS_AHEAD: 60,
 
+  // ネット予約の受付締切: 来店時刻の何分前まで受け付けるか(0 なら直前まで受け付ける)。
+  // 管理画面からの手動登録には適用しない。
+  BOOKING_CUTOFF_MINUTES: 60,
+
   // 総座席数。時間帯ごとの空席はこの数字を基準に自動計算されます。
   SEATS_TOTAL: 20,
 
@@ -58,6 +62,23 @@ const CONFIG = {
 
   // 予約が入るたびに店舗側にも通知メールを送る宛先(空文字にすると送らない)
   NOTIFY_EMAIL: '',
+
+  // お店の電話番号・住所。お客様向けメールと予約完了画面に
+  // 「変更・キャンセルはお電話で」の案内として載せる(空文字なら載せない)。
+  STORE_PHONE: '',
+  STORE_ADDRESS: '',
+
+  // お店のプライバシーポリシー(個人情報の取り扱い)ページのURL。設定すると予約フォームの
+  // 利用目的の案内にリンクを表示する(https:// で始まるURLのみ。空文字ならリンクなし)。
+  PRIVACY_POLICY_URL: '',
+
+  // 予約フォームでフリガナ・メールアドレスを必須にするか(どちらも既定で必須)。
+  // フリガナは来店時の受付や電話での確認で読み方が分からないと困るため必須。
+  // メールアドレスは確認メール・リマインダー(無断キャンセル対策)の送り先になるため必須。
+  // false にするとそれぞれ任意になる。メール未入力のお客様には確認メール・リマインダーが届かない
+  // (その場合もキャンセル待ちの登録だけは、空席のお知らせを送るためメールアドレス必須)。
+  REQUIRE_KANA: true,
+  REQUIRE_EMAIL: true,
 
   // 管理画面(?page=admin)のログインパスワード。必ずデフォルトから変更してください。
   ADMIN_PASSWORD: 'changeme',
@@ -109,9 +130,22 @@ const ROUTE_STAFF = '電話等(手動登録)';
 const STATUS_CONFIRMED = '予約確定';
 const STATUS_CANCELLED = 'キャンセル';
 const STATUS_WAITLIST = 'キャンセル待ち';
+// 来店予定時刻を過ぎても連絡なく来店しなかった予約。管理画面から手動で記録する
+// (確定予約に対してのみ。座席の集計・リマインダー・空席通知の対象外)
+const STATUS_NOSHOW = '無断キャンセル';
+const NOSHOW_TITLE_PREFIX = '【無断キャンセル】';
 
 // 管理画面ログインのセッション有効期間(秒)
 const ADMIN_SESSION_TTL_SEC = 6 * 60 * 60; // 6時間
+
+// 管理画面ログインの総当たり対策。GAS からは接続元を区別できないため、失敗回数は全体で数える。
+// 最後の失敗から FAIL_WINDOW_SEC 秒以内に MAX_FAILURES 回失敗すると、LOCK_SEC 秒間ログインを受け付けない。
+const ADMIN_LOGIN_MAX_FAILURES = 10;
+const ADMIN_LOGIN_FAIL_WINDOW_SEC = 15 * 60;
+const ADMIN_LOGIN_LOCK_SEC = 15 * 60;
+const ADMIN_LOGIN_FAIL_KEY = 'admin_login_failures';
+const ADMIN_LOGIN_LOCK_KEY = 'admin_login_locked';
+const ADMIN_LOGIN_LOCKED_MESSAGE = 'ログインの失敗が続いたため、しばらくログインできないようにしています。15分ほど待ってからお試しください。';
 
 // 管理画面から変更したコース設定を保存するプロパティキー(PropertiesService)。
 // CONFIG.COURSES は setup/create-store.js による再生成で上書きされる「初期値」の位置づけとし、
@@ -125,6 +159,15 @@ const BUSINESS_HOURS_PROPERTY_KEY = 'BUSINESS_HOURS_OVERRIDE';
 // キャンセル待ちへの空席通知メール、1回のキャンセル処理につき送る上限件数
 // (登録順の先着何件かに絞ることで、通知殺到を避ける)
 const WAITLIST_NOTIFY_MAX_PER_RUN = 5;
+
+// メール送信の失敗を記録するシートと、管理画面での表示に使う設定。
+// 送信失敗は MailApp の例外(1日の送信上限超過・宛先不正など)を握りつぶさず、このシートに残して
+// 管理画面に表示する(確認メールやリマインダーが届いていないことに店舗が気づけるようにするため)。
+const MAIL_ERROR_SHEET_NAME = 'メール送信エラー';
+const MAIL_ERROR_HEADERS = ['日時', '種類', '宛先', '件名', 'エラー内容'];
+const MAIL_ERRORS_ACK_KEY = 'MAIL_ERRORS_ACK_AT'; // 管理画面で「確認済み」にした日時(ミリ秒)
+const MAIL_ISSUE_LOOKBACK_DAYS = 7;
+const MAIL_QUOTA_WARN_THRESHOLD = 10; // その日の残り送信可能数がこれ未満なら管理画面で注意を出す
 
 // ==================== Web App エントリポイント ====================
 
@@ -270,8 +313,64 @@ function getConfig() {
     partySizeMax: CONFIG.PARTY_SIZE_MAX,
     waitlistEnabled: !!CONFIG.WAITLIST_ENABLED,
     liffId: CONFIG.LIFF_ID || '',
+    bookingCutoffMinutes: getBookingCutoffMinutes(),
+    requireKana: isKanaRequired(),
+    requireEmail: isEmailRequired(),
+    storePhone: CONFIG.STORE_PHONE || '',
+    privacyPolicyUrl: /^https:\/\//.test(CONFIG.PRIVACY_POLICY_URL || '') ? CONFIG.PRIVACY_POLICY_URL : '',
   };
 }
+
+/**
+ * ネット予約の受付締切(来店の何分前まで受け付けるか)。
+ * CONFIG にキーがない古い店舗コードでは 0(直前まで受付 = 従来どおり)とみなす。
+ */
+function getBookingCutoffMinutes() {
+  const v = Number(CONFIG.BOOKING_CUTOFF_MINUTES);
+  return Number.isFinite(v) && v > 0 ? v : 0;
+}
+
+/**
+ * 予約フォームでフリガナを必須にするか。明示的に false にした店舗だけ任意。
+ * CONFIG にキーがない古い店舗コードでは、従来どおり必須とみなす。
+ */
+function isKanaRequired() {
+  return CONFIG.REQUIRE_KANA !== false;
+}
+
+/**
+ * 予約フォームでメールアドレスを必須にするか。明示的に false にした店舗だけ任意。
+ * CONFIG にキーがない古い店舗コードでは、従来どおり必須とみなす。
+ */
+function isEmailRequired() {
+  return CONFIG.REQUIRE_EMAIL !== false;
+}
+
+/** 締切の分数を「1時間」「30分」「1時間30分」のような表記にする。 */
+function formatCutoffLabel(minutes) {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return (h ? h + '時間' : '') + (m ? m + '分' : '');
+}
+
+/**
+ * お客様向けメールの末尾に付ける、お店の連絡先と変更・キャンセル方法の案内。
+ * @param {string} lead 連絡先の前に置く一文
+ */
+function buildStoreContactLines(lead) {
+  const lines = ['', '──────────────'];
+  if (CONFIG.STORE_PHONE) {
+    lines.push(lead, 'TEL: ' + CONFIG.STORE_PHONE);
+  } else {
+    lines.push('ご予約の変更・キャンセルは、お手数ですがお店までご連絡ください。');
+  }
+  if (CONFIG.STORE_ADDRESS) lines.push('住所: ' + CONFIG.STORE_ADDRESS);
+  lines.push('', CONFIG.STORE_NAME || '');
+  return lines;
+}
+
+const CONTACT_LEAD_DEFAULT = 'ご予約の変更・キャンセルは、お手数ですがお電話でご連絡ください。';
+const CONTACT_LEAD_REMINDER = 'ご都合が悪くなった場合は、お手数ですが事前にお電話でご連絡ください。';
 
 /**
  * 指定日の予約状況を返す (フロントで空席のある時間帯の表示に使う)
@@ -310,8 +409,14 @@ function submitBooking(form) {
     }
 
     // ---- 入力チェック ----
-    if (!form || !form.name || !form.kana || !form.phone || !form.email || !form.date || !form.time || !form.course || !form.partySize) {
+    if (!form || !form.name || !form.phone || !form.date || !form.time || !form.course || !form.partySize) {
       return { success: false, message: '必須項目が入力されていません。' };
+    }
+    if (isKanaRequired() && !form.kana) {
+      return { success: false, message: 'フリガナを入力してください。' };
+    }
+    if (isEmailRequired() && !form.email) {
+      return { success: false, message: 'メールアドレスを入力してください。' };
     }
 
     // ---- 簡易連投対策(同じ電話番号からの短時間の連続送信をブロック) ----
@@ -340,6 +445,16 @@ function submitBooking(form) {
     const now = new Date();
     if (start.getTime() < now.getTime()) {
       return { success: false, message: '過去の日時は予約できません。' };
+    }
+
+    // ---- 受付締切チェック(直前の予約を防ぐ) ----
+    const cutoffMin = getBookingCutoffMinutes();
+    if (cutoffMin > 0 && start.getTime() - now.getTime() < cutoffMin * 60000) {
+      return {
+        success: false,
+        message: 'ネット予約はご来店の' + formatCutoffLabel(cutoffMin) + '前までです。' +
+          (CONFIG.STORE_PHONE ? 'お急ぎの場合はお電話(' + CONFIG.STORE_PHONE + ')でお問い合わせください。' : '別の時間をお選びください。'),
+      };
     }
 
     // ---- 予約可能日数チェック ----
@@ -373,22 +488,26 @@ function submitBooking(form) {
     if (isFull) {
       // 満席でも、キャンセル待ちの受付が有効かつお客様が希望していれば登録する
       if (CONFIG.WAITLIST_ENABLED && form.acceptWaitlist) {
+        if (!form.email) {
+          // 空席のお知らせはメールで送るため、キャンセル待ちだけはメールアドレス必須
+          return { success: false, message: 'キャンセル待ちの登録には、空きのお知らせをお送りするメールアドレスが必要です。' };
+        }
         const waitlistSheet = getOrCreateSheet();
         waitlistSheet.appendRow([
           new Date(),
-          form.name,
-          form.kana || '',
-          form.phone,
-          form.email || '',
-          form.date,
-          form.time,
+          textCell(form.name),
+          textCell(form.kana),
+          textCell(form.phone),
+          textCell(form.email),
+          textCell(form.date),
+          textCell(form.time),
           partySize,
-          form.course,
-          form.notes || '',
+          textCell(form.course),
+          textCell(form.notes),
           STATUS_WAITLIST,
           '', // カレンダー未登録(確定時に登録する)
           route,
-          lineDisplayName,
+          textCell(lineDisplayName),
           '', // リマインダー未送信
           '', // 空き通知未送信
         ]);
@@ -429,19 +548,19 @@ function submitBooking(form) {
     const sheet = getOrCreateSheet();
     sheet.appendRow([
       new Date(),
-      form.name,
-      form.kana || '',
-      form.phone,
-      form.email || '',
-      form.date,
-      form.time,
+      textCell(form.name),
+      textCell(form.kana),
+      textCell(form.phone),
+      textCell(form.email),
+      textCell(form.date),
+      textCell(form.time),
       partySize,
-      form.course,
-      form.notes || '',
+      textCell(form.course),
+      textCell(form.notes),
       STATUS_CONFIRMED,
       eventId,
       route,
-      lineDisplayName,
+      textCell(lineDisplayName),
       '', // リマインダー未送信
       '', // 空き通知未送信
     ]);
@@ -452,7 +571,8 @@ function submitBooking(form) {
 
     return {
       success: true,
-      message: form.date + ' ' + form.time + ' から ' + partySize + '名様「' + form.course + '」でのご予約が完了しました!当日を楽しみにお待ちしております♪',
+      message: form.date + ' ' + form.time + ' から ' + partySize + '名様「' + form.course + '」でのご予約が完了しました!当日を楽しみにお待ちしております♪' +
+        (CONFIG.STORE_PHONE ? '\n\nご予約の変更・キャンセルは、お電話(' + CONFIG.STORE_PHONE + ')でご連絡ください。' : ''),
     };
   } catch (err) {
     return { success: false, message: 'エラーが発生しました: ' + err.message };
@@ -467,12 +587,149 @@ function submitBooking(form) {
  * 管理画面ログイン。成功時はセッショントークンを返す。
  */
 function adminLogin(password) {
-  if (!CONFIG.ADMIN_PASSWORD || password !== CONFIG.ADMIN_PASSWORD) {
-    return { success: false, message: 'パスワードが違います。' };
+  // 失敗回数の読み書きを同時アクセスで取りこぼさないよう、排他区間の中で判定する
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const cache = CacheService.getScriptCache();
+
+    // ロック中は、正しいパスワードでも受け付けない(ロック中も試せると総当たりを続けられるため)
+    if (cache.get(ADMIN_LOGIN_LOCK_KEY)) {
+      return { success: false, message: ADMIN_LOGIN_LOCKED_MESSAGE };
+    }
+
+    if (!CONFIG.ADMIN_PASSWORD || password !== CONFIG.ADMIN_PASSWORD) {
+      const failures = (Number(cache.get(ADMIN_LOGIN_FAIL_KEY)) || 0) + 1;
+      if (failures >= ADMIN_LOGIN_MAX_FAILURES) {
+        cache.put(ADMIN_LOGIN_LOCK_KEY, '1', ADMIN_LOGIN_LOCK_SEC);
+        cache.remove(ADMIN_LOGIN_FAIL_KEY);
+        notifyAdminLoginLocked();
+        return { success: false, message: ADMIN_LOGIN_LOCKED_MESSAGE };
+      }
+      // 最後の失敗から ADMIN_LOGIN_FAIL_WINDOW_SEC 秒以内の失敗を数える
+      cache.put(ADMIN_LOGIN_FAIL_KEY, String(failures), ADMIN_LOGIN_FAIL_WINDOW_SEC);
+      return { success: false, message: 'パスワードが違います。' };
+    }
+
+    cache.remove(ADMIN_LOGIN_FAIL_KEY);
+    const token = Utilities.getUuid();
+    cache.put('admin_' + token, '1', ADMIN_SESSION_TTL_SEC);
+    return { success: true, token: token, storeName: CONFIG.STORE_NAME };
+  } finally {
+    lock.releaseLock();
   }
-  const token = Utilities.getUuid();
-  CacheService.getScriptCache().put('admin_' + token, '1', ADMIN_SESSION_TTL_SEC);
-  return { success: true, token: token, storeName: CONFIG.STORE_NAME };
+}
+
+// ==================== メール送信(失敗の記録つき) ====================
+
+/**
+ * メールを送る。失敗(1日の送信上限・宛先不正など)しても例外は投げず、
+ * 「メール送信エラー」シートに記録して false を返す。メール送信は必ずこの関数を通すこと。
+ * @param {string} kind 管理画面・エラーシートに表示する種類('予約確認' など)
+ * @return {boolean} 送信できたら true
+ */
+function sendMail(kind, to, subject, body) {
+  try {
+    if (MailApp.getRemainingDailyQuota() <= 0) {
+      throw new Error('本日のメール送信上限に達したため送信できませんでした');
+    }
+    MailApp.sendEmail(to, subject, body);
+    return true;
+  } catch (err) {
+    Logger.log('メール送信エラー(' + kind + '): ' + err.message);
+    recordMailError(kind, to, subject, err.message);
+    return false;
+  }
+}
+
+function recordMailError(kind, to, subject, message) {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let sheet = ss.getSheetByName(MAIL_ERROR_SHEET_NAME);
+    if (!sheet) {
+      sheet = ss.insertSheet(MAIL_ERROR_SHEET_NAME);
+      sheet.appendRow(MAIL_ERROR_HEADERS);
+      sheet.setFrozenRows(1);
+    }
+    // 件名にはお客様の名前が入るため、数式として実行されないよう文字として保存する
+    sheet.appendRow([new Date(), textCell(kind), textCell(to), textCell(subject), textCell(message)]);
+  } catch (e) {
+    Logger.log('メール送信エラーの記録に失敗: ' + e.message);
+  }
+}
+
+/**
+ * 管理画面: 直近のメール送信エラー(「確認済み」より後のもの)と、本日の残り送信可能数を返す。要ログイン。
+ */
+function getMailIssuesForAdmin(token) {
+  if (!isValidAdminToken(token)) {
+    return { success: false, authError: true, message: 'ログインの有効期限が切れました。再度ログインしてください。' };
+  }
+
+  const ackAt = Number(PropertiesService.getScriptProperties().getProperty(MAIL_ERRORS_ACK_KEY)) || 0;
+  const since = Math.max(ackAt, Date.now() - MAIL_ISSUE_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
+
+  let count = 0;
+  let latest = null;
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(MAIL_ERROR_SHEET_NAME);
+  if (sheet) {
+    // 予約シートとは列構成が違うため readAllRows は使わない(1列目は Date で書き込んでいる)
+    const values = sheet.getDataRange().getValues();
+    for (let r = 1; r < values.length; r++) {
+      const at = values[r][0];
+      const atMs = at instanceof Date || Object.prototype.toString.call(at) === '[object Date]' ? at.getTime() : NaN;
+      if (!(atMs > since)) continue;
+      count++;
+      latest = {
+        at: Utilities.formatDate(at, getSheetTimeZone(), 'yyyy/MM/dd HH:mm'),
+        kind: String(values[r][1]),
+        to: String(values[r][2]),
+        error: String(values[r][4]),
+      };
+    }
+  }
+
+  let remainingQuota = null;
+  try {
+    remainingQuota = MailApp.getRemainingDailyQuota();
+  } catch (e) {
+    Logger.log('送信可能数の取得に失敗: ' + e.message);
+  }
+
+  return {
+    success: true,
+    count: count,
+    latest: latest,
+    remainingQuota: remainingQuota,
+    quotaLow: remainingQuota !== null && remainingQuota < MAIL_QUOTA_WARN_THRESHOLD,
+  };
+}
+
+/** 管理画面: 表示中のメール送信エラーを「確認済み」にする(以後はそれより新しいエラーだけを表示)。要ログイン。 */
+function ackMailIssuesAdmin(token) {
+  if (!isValidAdminToken(token)) {
+    return { success: false, authError: true, message: 'ログインの有効期限が切れました。再度ログインしてください。' };
+  }
+  PropertiesService.getScriptProperties().setProperty(MAIL_ERRORS_ACK_KEY, String(Date.now()));
+  return { success: true };
+}
+
+/** ログインのロックが始まったことを店舗の通知先メールへ知らせる(通知先が未設定なら何もしない)。 */
+function notifyAdminLoginLocked() {
+  if (!CONFIG.NOTIFY_EMAIL) return;
+  try {
+    sendMail(
+      '店舗通知(管理画面ロック)',
+      CONFIG.NOTIFY_EMAIL,
+      '[' + (CONFIG.STORE_NAME || '予約システム') + '] 管理画面のログインを一時ロックしました',
+      '管理画面へのログインに' + ADMIN_LOGIN_MAX_FAILURES + '回続けて失敗したため、' +
+        Math.round(ADMIN_LOGIN_LOCK_SEC / 60) + '分間ログインを受け付けないようにしました。\n\n' +
+        'お店の方の入力ミスでなければ、第三者がパスワードを推測しようとしている可能性があります。\n' +
+        'ロック解除後、念のため管理画面のパスワード(CONFIG.ADMIN_PASSWORD)の変更をご検討ください。'
+    );
+  } catch (err) {
+    Logger.log('ログインロック通知メールの送信エラー: ' + err.message);
+  }
 }
 
 /**
@@ -484,10 +741,12 @@ function getReservationsForAdmin(token, dateStr) {
   }
 
   const sheet = getOrCreateSheet();
-  const values = sheet.getDataRange().getValues();
+  const values = readAllRows(sheet);
   const reservations = [];
   let reservedSeats = 0;
   let waitlistCount = 0;
+  // 無断キャンセルの記録は当日以降(来店予定日を迎えた予約)にだけ許可する
+  const isTodayOrPast = dateStr <= formatDateStr(new Date());
 
   for (let r = 1; r < values.length; r++) {
     const row = values[r];
@@ -508,6 +767,7 @@ function getReservationsForAdmin(token, dateStr) {
       status: status,
       route: row[COL.ROUTE] || ROUTE_WEB,
       lineDisplayName: row[COL.LINE_NAME] || '',
+      canMarkNoShow: status === STATUS_CONFIRMED && isTodayOrPast,
     });
   }
 
@@ -546,7 +806,7 @@ function getWeekForAdmin(token, fromDateStr) {
   }
 
   const sheet = getOrCreateSheet();
-  const values = sheet.getDataRange().getValues();
+  const values = readAllRows(sheet);
   const byDate = {};
   dateStrs.forEach(function (d) { byDate[d] = { reservedSeats: 0, count: 0, waitlistCount: 0 }; });
 
@@ -659,15 +919,15 @@ function createReservationAdmin(token, form) {
     const sheet = getOrCreateSheet();
     sheet.appendRow([
       new Date(),
-      form.name,
-      form.kana || '',
-      form.phone,
-      form.email || '',
-      form.date,
-      form.time,
+      textCell(form.name),
+      textCell(form.kana),
+      textCell(form.phone),
+      textCell(form.email),
+      textCell(form.date),
+      textCell(form.time),
       partySize,
-      form.course,
-      form.notes || '',
+      textCell(form.course),
+      textCell(form.notes),
       STATUS_CONFIRMED,
       eventId,
       ROUTE_STAFF,
@@ -706,13 +966,16 @@ function updateReservationAdmin(token, rowIndex, form) {
 
   try {
     const sheet = getOrCreateSheet();
-    const row = sheet.getRange(rowIndex, 1, 1, SHEET_HEADERS.length).getValues()[0];
+    const row = readRow(sheet, rowIndex);
     if (!row || !row[COL.NAME]) {
       return { success: false, message: '対象の予約が見つかりません。' };
     }
     const status = row[COL.STATUS]; // ステータス自体は変更しない
     if (status === STATUS_CANCELLED) {
       return { success: false, message: 'キャンセル済みの予約は変更できません。' };
+    }
+    if (status === STATUS_NOSHOW) {
+      return { success: false, message: '無断キャンセルとして記録済みの予約は変更できません(先に記録を取り消してください)。' };
     }
 
     if (!form || !form.name || !form.phone || !form.date || !form.time || !form.course || !form.partySize) {
@@ -806,19 +1069,19 @@ function updateReservationAdmin(token, rowIndex, form) {
 
     sheet.getRange(rowIndex, 1, 1, SHEET_HEADERS.length).setValues([[
       row[COL.RECEIVED_AT],
-      form.name,
-      form.kana || '',
-      form.phone,
-      form.email || '',
-      form.date,
-      form.time,
+      textCell(form.name),
+      textCell(form.kana),
+      textCell(form.phone),
+      textCell(form.email),
+      textCell(form.date),
+      textCell(form.time),
       partySize,
-      form.course,
-      form.notes || '',
+      textCell(form.course),
+      textCell(form.notes),
       status,
       eventId,
       row[COL.ROUTE] || ROUTE_WEB, // 申込経路・LINE表示名は変更内容に含まれないので元の値を維持する
-      row[COL.LINE_NAME] || '',
+      textCell(row[COL.LINE_NAME]),
       reminderSent,
       row[COL.WAITLIST_NOTIFIED] || '',
     ]]);
@@ -849,7 +1112,7 @@ function promoteWaitlistAdmin(token, rowIndex, force) {
 
   try {
     const sheet = getOrCreateSheet();
-    const row = sheet.getRange(rowIndex, 1, 1, SHEET_HEADERS.length).getValues()[0];
+    const row = readRow(sheet, rowIndex);
     if (!row || !row[COL.NAME]) {
       return { success: false, message: '対象の予約が見つかりません。' };
     }
@@ -923,12 +1186,15 @@ function cancelReservationAdmin(token, rowIndex) {
   lock.waitLock(30000);
   try {
     const sheet = getOrCreateSheet();
-    const row = sheet.getRange(rowIndex, 1, 1, SHEET_HEADERS.length).getValues()[0];
+    const row = readRow(sheet, rowIndex);
     if (!row || !row[COL.NAME]) {
       return { success: false, message: '対象の予約が見つかりません。' };
     }
     if (row[COL.STATUS] === STATUS_CANCELLED) {
       return { success: false, message: 'この予約は既にキャンセル済みです。' };
+    }
+    if (row[COL.STATUS] === STATUS_NOSHOW) {
+      return { success: false, message: 'この予約は無断キャンセルとして記録済みです(キャンセルにする場合は、先に記録を取り消してください)。' };
     }
 
     const wasConfirmed = row[COL.STATUS] === STATUS_CONFIRMED;
@@ -950,6 +1216,68 @@ function cancelReservationAdmin(token, rowIndex) {
     // 確定していた予約のキャンセルで座席に空きが出た場合、その日のキャンセル待ちへ通知する
     if (wasConfirmed) {
       notifyWaitlistOfOpening(dateStr);
+    }
+
+    return { success: true };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * 管理画面: 確定予約を「無断キャンセル」として記録する(undo=true で記録を取り消し、予約確定に戻す)。要ログイン。
+ * 来店予定日を迎えた(当日以降の)予約だけが対象。カレンダーの予定は記録として残し、
+ * タイトルの先頭に「【無断キャンセル】」を付け外しする。空席通知は行わない(当日以降のため)。
+ * @param {string} token
+ * @param {number} rowIndex シート上の行番号
+ * @param {boolean} undo
+ */
+function markNoShowAdmin(token, rowIndex, undo) {
+  if (!isValidAdminToken(token)) {
+    return { success: false, authError: true, message: 'ログインの有効期限が切れました。再度ログインしてください。' };
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const sheet = getOrCreateSheet();
+    const row = readRow(sheet, rowIndex);
+    if (!row || !row[COL.NAME]) {
+      return { success: false, message: '対象の予約が見つかりません。' };
+    }
+
+    const status = row[COL.STATUS];
+    if (undo) {
+      if (status !== STATUS_NOSHOW) {
+        return { success: false, message: 'この予約は無断キャンセルとして記録されていません。' };
+      }
+    } else {
+      if (status !== STATUS_CONFIRMED) {
+        return { success: false, message: '無断キャンセルとして記録できるのは、確定済みの予約だけです。' };
+      }
+      if (String(row[COL.DATE]) > formatDateStr(new Date())) {
+        return { success: false, message: 'ご来店予定日より前の予約は、無断キャンセルとして記録できません。' };
+      }
+    }
+
+    sheet.getRange(rowIndex, COL.STATUS + 1).setValue(undo ? STATUS_CONFIRMED : STATUS_NOSHOW);
+
+    const eventId = row[COL.EVENT_ID];
+    if (eventId) {
+      try {
+        const calendar = CalendarApp.getCalendarById(CONFIG.CALENDAR_ID);
+        const event = calendar.getEventById(eventId);
+        if (event) {
+          const title = event.getTitle();
+          if (undo && title.indexOf(NOSHOW_TITLE_PREFIX) === 0) {
+            event.setTitle(title.slice(NOSHOW_TITLE_PREFIX.length));
+          } else if (!undo && title.indexOf(NOSHOW_TITLE_PREFIX) !== 0) {
+            event.setTitle(NOSHOW_TITLE_PREFIX + title);
+          }
+        }
+      } catch (calErr) {
+        Logger.log('カレンダー更新エラー: ' + calErr.message);
+      }
     }
 
     return { success: true };
@@ -1142,11 +1470,12 @@ function getStatsForAdmin(token, fromDate, toDate) {
   }
 
   const sheet = getOrCreateSheet();
-  const values = sheet.getDataRange().getValues();
+  const values = readAllRows(sheet);
 
   let confirmedCount = 0;
   let confirmedPeople = 0;
   let cancelledCount = 0;
+  let noShowCount = 0;
   let waitlistCount = 0;
 
   for (let r = 1; r < values.length; r++) {
@@ -1161,13 +1490,17 @@ function getStatsForAdmin(token, fromDate, toDate) {
       confirmedPeople += partySize;
     } else if (status === STATUS_CANCELLED) {
       cancelledCount++;
+    } else if (status === STATUS_NOSHOW) {
+      noShowCount++;
     } else if (status === STATUS_WAITLIST) {
       waitlistCount++;
     }
   }
 
-  const totalForRate = confirmedCount + cancelledCount;
+  // 率の分母は「一度は確定した予約」全体(確定のまま・キャンセル・無断キャンセル)
+  const totalForRate = confirmedCount + cancelledCount + noShowCount;
   const cancelRate = totalForRate > 0 ? cancelledCount / totalForRate : 0;
+  const noShowRate = totalForRate > 0 ? noShowCount / totalForRate : 0;
   const avgPartySize = confirmedCount > 0 ? confirmedPeople / confirmedCount : 0;
 
   return {
@@ -1178,6 +1511,8 @@ function getStatsForAdmin(token, fromDate, toDate) {
     confirmedPeople: confirmedPeople,
     cancelledCount: cancelledCount,
     cancelRate: cancelRate,
+    noShowCount: noShowCount,
+    noShowRate: noShowRate,
     avgPartySize: avgPartySize,
     waitlistCount: waitlistCount,
   };
@@ -1189,6 +1524,66 @@ function isValidAdminToken(token) {
 }
 
 // ==================== ユーティリティ ====================
+
+// ==================== シートの読み書き(自動変換対策) ====================
+//
+// Google スプレッドシートは、文字列として書き込んだ値でも「入力値」とみなして自動変換する
+// ('2026-11-07' → 日付、'19:00' → 時刻、'09012345678' → 数値で先頭の0が消える、'=' 始まり → 数式)。
+// このシステムは日付・時刻を 'YYYY-MM-DD' / 'HH:mm' の文字列として比較するため、変換されると
+// 空席計算・一覧・リマインダーが一致しなくなる。そこで:
+//  - 書き込み: お客様の入力やコース名などの文字列は textCell() で「' + 値」にして文字として保存する
+//  - 読み込み: 必ず readAllRows() / readRow() を通し、既に変換済みの古い行も文字列に戻して扱う
+
+/** 文字として保存させたい値を「'」付きにする(空なら空のまま)。数式としての実行も防ぐ。 */
+function textCell(v) {
+  if (v === null || v === undefined || v === '') return '';
+  return "'" + String(v);
+}
+
+function getSheetTimeZone() {
+  try {
+    return SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone() || CONFIG.TIMEZONE;
+  } catch (e) {
+    return CONFIG.TIMEZONE;
+  }
+}
+
+/**
+ * シートから読んだ1行の、日付・時刻・電話番号の列を文字列にそろえる(元の配列は変更しない)。
+ * 日付・時刻のセルは Date で返ってくるため、シートのタイムゾーンで文字列に戻す
+ * (時刻だけのセルは 1899-12-30 の Date になり、別のタイムゾーンで整形するとずれるため)。
+ */
+function normalizeRow(row, tz) {
+  const out = row.slice();
+  const date = out[COL.DATE];
+  if (isDateValue(date)) out[COL.DATE] = Utilities.formatDate(date, tz, 'yyyy-MM-dd');
+  const time = out[COL.TIME];
+  if (isDateValue(time)) out[COL.TIME] = Utilities.formatDate(time, tz, 'HH:mm');
+  const phone = out[COL.PHONE];
+  if (typeof phone === 'number') {
+    // 数値に変換されて先頭の0が消えた電話番号を戻す(携帯11桁→10桁、固定10桁→9桁になっている)
+    const s = String(phone);
+    out[COL.PHONE] = /^\d{9,10}$/.test(s) ? '0' + s : s;
+  }
+  return out;
+}
+
+function isDateValue(v) {
+  return Object.prototype.toString.call(v) === '[object Date]' && !isNaN(v.getTime());
+}
+
+/** シート全体を読み、2行目以降を normalizeRow で整える(1行目はヘッダー)。 */
+function readAllRows(sheet) {
+  const tz = getSheetTimeZone();
+  return sheet.getDataRange().getValues().map(function (row, i) {
+    return i === 0 ? row : normalizeRow(row, tz);
+  });
+}
+
+/** 指定した行(シート上の行番号)を読み、normalizeRow で整える。 */
+function readRow(sheet, rowIndex) {
+  return normalizeRow(sheet.getRange(rowIndex, 1, 1, SHEET_HEADERS.length).getValues()[0], getSheetTimeZone());
+}
 
 function getOrCreateSheet() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -1217,7 +1612,7 @@ function getOrCreateSheet() {
  */
 function getConfirmedRangesForDate(dateStr, excludeRowIndex) {
   const sheet = getOrCreateSheet();
-  const values = sheet.getDataRange().getValues();
+  const values = readAllRows(sheet);
   const ranges = [];
 
   for (let r = 1; r < values.length; r++) {
@@ -1251,7 +1646,12 @@ function sumOverlappingPartySize(ranges, startMin, endMin) {
   }, 0);
 }
 
-function buildBookingEmailBody(form, partySize) {
+/**
+ * @param {Object} form
+ * @param {number} partySize
+ * @param {boolean} forCustomer true ならお客様向けとして末尾にお店の連絡先と変更・キャンセル方法を載せる
+ */
+function buildBookingEmailBody(form, partySize, forCustomer) {
   const lines = [
     (form.name || '') + ' 様',
     '',
@@ -1270,10 +1670,13 @@ function buildBookingEmailBody(form, partySize) {
     '━━━━━━━━━━━━━━━',
     '',
     'スタッフ一同、心を込めてお迎えの準備をしてお待ちしております。',
-    '当日お会いできる日を、私たちもとても楽しみにしています!',
-    '',
-    (CONFIG.STORE_NAME || '')
+    '当日お会いできる日を、私たちもとても楽しみにしています!'
   );
+  if (forCustomer) {
+    Array.prototype.push.apply(lines, buildStoreContactLines(CONTACT_LEAD_DEFAULT));
+  } else {
+    lines.push('', CONFIG.STORE_NAME || '');
+  }
   return lines.join('\n');
 }
 
@@ -1281,7 +1684,7 @@ function sendCustomerConfirmationEmail(form, partySize) {
   if (!form.email) return;
   try {
     const subject = '[' + (CONFIG.STORE_NAME || 'ご予約') + '] ご予約確認 (' + form.date + ' ' + form.time + ')';
-    MailApp.sendEmail(form.email, subject, buildBookingEmailBody(form, partySize));
+    sendMail('予約確認', form.email, subject, buildBookingEmailBody(form, partySize, true));
   } catch (err) {
     Logger.log('お客様への確認メール送信エラー: ' + err.message);
   }
@@ -1293,7 +1696,7 @@ function sendBookingEmails(form, partySize) {
   if (CONFIG.NOTIFY_EMAIL) {
     try {
       const staffSubject = '[新規予約] ' + form.date + ' ' + form.time + ' ' + form.name + '様 ' + partySize + '名';
-      MailApp.sendEmail(CONFIG.NOTIFY_EMAIL, staffSubject, buildBookingEmailBody(form, partySize) + '\n\n電話番号: ' + form.phone);
+      sendMail('店舗通知(新規予約)', CONFIG.NOTIFY_EMAIL, staffSubject, buildBookingEmailBody(form, partySize, false) + '\n\n電話番号: ' + form.phone);
     } catch (err) {
       Logger.log('店舗への通知メール送信エラー: ' + err.message);
     }
@@ -1314,9 +1717,10 @@ function sendWaitlistRegisteredEmail(form, partySize) {
         'コース: ' + form.course,
         '',
         '空きが出た場合、折り返しご連絡いたします。恐れ入りますが、そのままお待ちください。',
-        (CONFIG.STORE_NAME || ''),
-      ].filter(function (s) { return s !== ''; }).join('\n');
-      MailApp.sendEmail(form.email, subject, body);
+      ].filter(function (s) { return s !== ''; })
+        .concat(buildStoreContactLines('キャンセル待ちの取り消しは、お手数ですがお電話でご連絡ください。'))
+        .join('\n');
+      sendMail('キャンセル待ち登録', form.email, subject, body);
     } catch (err) {
       Logger.log('キャンセル待ち登録メール送信エラー: ' + err.message);
     }
@@ -1325,7 +1729,7 @@ function sendWaitlistRegisteredEmail(form, partySize) {
   if (CONFIG.NOTIFY_EMAIL) {
     try {
       const staffSubject = '[キャンセル待ち登録] ' + form.date + ' ' + form.time + ' ' + form.name + '様 ' + partySize + '名';
-      MailApp.sendEmail(CONFIG.NOTIFY_EMAIL, staffSubject, '電話番号: ' + form.phone);
+      sendMail('店舗通知(キャンセル待ち)', CONFIG.NOTIFY_EMAIL, staffSubject, '電話番号: ' + form.phone);
     } catch (err) {
       Logger.log('店舗への通知メール送信エラー: ' + err.message);
     }
@@ -1352,10 +1756,8 @@ function sendWaitlistPromotedEmail(form, partySize) {
       '',
       'スタッフ一同、心を込めてお迎えの準備をしてお待ちしております。',
       '当日お会いできる日を、私たちもとても楽しみにしています!',
-      '',
-      (CONFIG.STORE_NAME || ''),
-    ].join('\n');
-    MailApp.sendEmail(form.email, subject, body);
+    ].concat(buildStoreContactLines(CONTACT_LEAD_DEFAULT)).join('\n');
+    sendMail('繰り上げ確定', form.email, subject, body);
   } catch (err) {
     Logger.log('繰り上げ確定メール送信エラー: ' + err.message);
   }
@@ -1371,7 +1773,7 @@ function sendWaitlistPromotedEmail(form, partySize) {
  */
 function notifyWaitlistOfOpening(dateStr) {
   const sheet = getOrCreateSheet();
-  const values = sheet.getDataRange().getValues();
+  const values = readAllRows(sheet);
   let notifiedCount = 0;
   let anyNotified = false;
 
@@ -1411,7 +1813,7 @@ function notifyWaitlistOfOpening(dateStr) {
 
   if (anyNotified && CONFIG.NOTIFY_EMAIL) {
     try {
-      MailApp.sendEmail(CONFIG.NOTIFY_EMAIL, '[空席通知] ' + dateStr + ' のキャンセル待ちへ通知しました',
+      sendMail('店舗通知(空席通知)', CONFIG.NOTIFY_EMAIL, '[空席通知] ' + dateStr + ' のキャンセル待ちへ通知しました',
         dateStr + ' に空きが出たため、キャンセル待ちのお客様(' + notifiedCount + '件)へ空席通知メールを送信しました。\n' +
         '繰り上げ確定は管理画面から行ってください。');
     } catch (err) {
@@ -1437,12 +1839,10 @@ function sendWaitlistOpeningEmail(form, partySize) {
       'コース: ' + form.course,
       '━━━━━━━━━━━━━━━',
       '',
-      '席数に限りがあり、先着順のご案内となります。ご希望の場合はお早めにお電話にてご連絡ください。',
+      '席数に限りがあり、先着順のご案内となります。',
       '(このメールは空きが出たお知らせであり、まだご予約が確定したものではありません)',
-      '',
-      (CONFIG.STORE_NAME || ''),
-    ].join('\n');
-    MailApp.sendEmail(form.email, subject, body);
+    ].concat(buildStoreContactLines('ご希望の場合は、お早めにお電話でご連絡ください。')).join('\n');
+    sendMail('空席のお知らせ', form.email, subject, body);
   } catch (err) {
     Logger.log('空席通知メール送信エラー: ' + err.message);
   }
@@ -1491,7 +1891,7 @@ function sendRemindersOfKind(kind) {
       : formatDateStr(now);
 
     const sheet = getOrCreateSheet();
-    const values = sheet.getDataRange().getValues();
+    const values = readAllRows(sheet);
 
     for (let r = 1; r < values.length; r++) {
       const row = values[r];
@@ -1508,7 +1908,8 @@ function sendRemindersOfKind(kind) {
       };
       const partySize = Number(row[COL.PARTY_SIZE]) || 0;
 
-      sendReminderEmail(form, partySize, kind);
+      // 送れたときだけ送信済みにする(失敗は「メール送信エラー」シートに記録され、管理画面に表示される)
+      if (!sendReminderEmail(form, partySize, kind)) continue;
 
       const newFlags = (sentFlags ? sentFlags + ',' : '') + kind;
       sheet.getRange(r + 1, COL.REMINDER_SENT + 1).setValue(newFlags);
@@ -1518,8 +1919,9 @@ function sendRemindersOfKind(kind) {
   }
 }
 
+/** @return {boolean} 送信できたら true(送信済みの印はこの結果で付ける) */
 function sendReminderEmail(form, partySize, kind) {
-  if (!form.email) return;
+  if (!form.email) return false;
   try {
     const isDayBefore = kind === REMINDER_KIND_DAY_BEFORE;
     const subject = '[' + (CONFIG.STORE_NAME || 'ご予約') + '] ' + (isDayBefore ? '明日' : '本日') + 'のご予約のご案内 (' + form.date + ' ' + form.time + ')';
@@ -1539,12 +1941,11 @@ function sendReminderEmail(form, partySize, kind) {
       '人数: ' + partySize + '名',
       'コース: ' + form.course,
       '━━━━━━━━━━━━━━━',
-      '',
-      (CONFIG.STORE_NAME || ''),
-    ].join('\n');
-    MailApp.sendEmail(form.email, subject, body);
+    ].concat(buildStoreContactLines(CONTACT_LEAD_REMINDER)).join('\n');
+    return sendMail(isDayBefore ? '前日リマインダー' : '当日リマインダー', form.email, subject, body);
   } catch (err) {
-    Logger.log('リマインダーメール送信エラー: ' + err.message);
+    Logger.log('リマインダーメール作成エラー: ' + err.message);
+    return false;
   }
 }
 

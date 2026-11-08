@@ -74,6 +74,17 @@
     }
     button#loginBtn:disabled { background: #aaa; cursor: not-allowed; }
     #loginMsg { margin-top: 12px; font-size: 13px; color: var(--danger); text-align: center; }
+    #mailIssueBanner {
+      display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: flex-start; justify-content: space-between;
+      background: #fdf1de; border: 1px solid #e8c48a; color: #6b4300;
+      border-radius: 10px; padding: 10px 12px; margin: 8px 0 12px; font-size: 12.5px; line-height: 1.6;
+    }
+    #mailIssueText { flex: 1 1 240px; min-width: 0; overflow-wrap: anywhere; }
+    #mailIssueBanner b { color: #8a3b00; }
+    #mailIssueAckBtn {
+      flex-shrink: 0; background: #fff; border: 1px solid #c9a46a; color: #6b4300;
+      padding: 5px 10px; font-size: 12px; white-space: nowrap;
+    }
 
     .dateRow {
       display: flex;
@@ -181,6 +192,7 @@
     .badge.confirmed { background: #e5f3ec; color: var(--ok); }
     .badge.cancelled { background: #f3e5e5; color: var(--danger); }
     .badge.waitlist { background: #fdf1de; color: #a3701f; }
+    .badge.noshow { background: #3a2e2a; color: #fff; }
     .badge.line { background: #e3f9ea; color: #06a54a; margin-left: 4px; }
     .selectHint { font-weight: bold; white-space: nowrap; }
     button.promoteBtn {
@@ -191,6 +203,15 @@
       font-size: 12px;
     }
     button.promoteBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+    button.noShowBtn, button.noShowUndoBtn {
+      background: #fff;
+      border: 1px solid #8a7a72;
+      color: #5a4a42;
+      padding: 6px 10px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    button.noShowBtn:disabled, button.noShowUndoBtn:disabled { opacity: 0.4; cursor: not-allowed; }
     #listMsg { text-align: center; color: #888; padding: 20px 0; font-size: 13px; }
     .notes { max-width: 160px; white-space: pre-wrap; word-break: break-word; color: #555; }
 
@@ -530,6 +551,10 @@
 
   <div class="card" id="dashCard" style="display:none;">
     <h1 id="dashTitle">予約管理</h1>
+    <div id="mailIssueBanner" style="display:none;">
+      <div id="mailIssueText"></div>
+      <button id="mailIssueAckBtn" type="button">確認済みにする</button>
+    </div>
     <div class="dateRow">
       <label>日付</label>
       <input type="date" id="targetDate">
@@ -798,6 +823,7 @@
         if (e.key === 'Enter') doLogin();
       });
       document.getElementById('logoutBtn').addEventListener('click', doLogout);
+      document.getElementById('mailIssueAckBtn').addEventListener('click', ackMailIssues);
       document.getElementById('targetDate').addEventListener('change', loadList);
       document.getElementById('newBtn').addEventListener('click', function () { toggleAddForm(true); });
       document.getElementById('addCancelBtn').addEventListener('click', function () { toggleAddForm(false); });
@@ -1499,6 +1525,8 @@
         { num: res.confirmedPeople + '名', label: '総人数' },
         { num: res.cancelledCount + '件', label: 'キャンセル数' },
         { num: (Math.round(res.cancelRate * 1000) / 10) + '%', label: 'キャンセル率' },
+        { num: (res.noShowCount || 0) + '件', label: '無断キャンセル数' },
+        { num: (Math.round((res.noShowRate || 0) * 1000) / 10) + '%', label: '無断キャンセル率' },
         { num: (Math.round(res.avgPartySize * 10) / 10) + '名', label: '1組あたり平均人数' },
         { num: res.waitlistCount + '件', label: 'キャンセル待ち(参考)' },
       ].forEach(function (t) {
@@ -1657,6 +1685,63 @@
     function showDashboard() {
       document.getElementById('loginCard').style.display = 'none';
       document.getElementById('dashCard').style.display = 'block';
+      loadMailIssues();
+    }
+
+    // ---- メール送信エラーのお知らせ ----
+    function loadMailIssues() {
+      if (!TOKEN) return;
+      google.script.run
+        .withSuccessHandler(renderMailIssues)
+        .withFailureHandler(function () { /* お知らせの取得失敗は予約業務を止めないので表示しない */ })
+        .getMailIssuesForAdmin(TOKEN);
+    }
+
+    function renderMailIssues(res) {
+      var banner = document.getElementById('mailIssueBanner');
+      var text = document.getElementById('mailIssueText');
+      var ackBtn = document.getElementById('mailIssueAckBtn');
+      if (!res || !res.success || (!res.count && !res.quotaLow)) {
+        banner.style.display = 'none';
+        return;
+      }
+      var html = '';
+      if (res.count) {
+        html += '<b>直近のメール送信に失敗が ' + res.count + ' 件あります。</b>' +
+          '確認メールやリマインダーがお客様に届いていない可能性があります。必要ならお電話でご連絡ください。';
+        if (res.latest) {
+          html += '<br>最新: ' + escapeHtml(res.latest.at) + ' ' + escapeHtml(res.latest.kind) +
+            '(' + escapeHtml(res.latest.to) + ')— ' + escapeHtml(res.latest.error);
+        }
+        html += '<br>詳細はスプレッドシートの「メール送信エラー」シートで確認できます。';
+      }
+      if (res.quotaLow) {
+        html += (html ? '<br>' : '') + '<b>本日送信できるメールの残りが ' + res.remainingQuota + ' 通です。</b>' +
+          '上限に達すると、本日中は確認メールやリマインダーが送れません。';
+      }
+      text.innerHTML = html;
+      ackBtn.style.display = res.count ? '' : 'none';
+      banner.style.display = 'flex';
+    }
+
+    function ackMailIssues() {
+      var btn = document.getElementById('mailIssueAckBtn');
+      btn.disabled = true;
+      google.script.run
+        .withSuccessHandler(function (res) {
+          btn.disabled = false;
+          if (res.authError) {
+            doLogout();
+            document.getElementById('loginMsg').textContent = res.message;
+            return;
+          }
+          loadMailIssues();
+        })
+        .withFailureHandler(function (err) {
+          btn.disabled = false;
+          alert('エラー: ' + err.message);
+        })
+        .ackMailIssuesAdmin(TOKEN);
     }
 
     function loadList() {
@@ -1712,11 +1797,13 @@
 
       LAST_RESERVATIONS.forEach(function (row) {
         var tr = document.createElement('tr');
-        var isCancelled = row.status === 'キャンセル';
+        var isNoShow = row.status === '無断キャンセル';
+        // 無断キャンセルも「終わった予約」として、キャンセルと同じく編集・キャンセルの対象外にする
+        var isCancelled = row.status === 'キャンセル' || isNoShow;
         var isWaitlist = row.status === 'キャンセル待ち';
         if (isCancelled) tr.className = 'cancelled';
 
-        var badgeClass = isCancelled ? 'cancelled' : (isWaitlist ? 'waitlist' : 'confirmed');
+        var badgeClass = isNoShow ? 'noshow' : (isCancelled ? 'cancelled' : (isWaitlist ? 'waitlist' : 'confirmed'));
         tr.innerHTML =
           '<td data-label="時間">' + escapeHtml(row.time) + '</td>' +
           '<td data-label="人数">' + escapeHtml(row.partySize) + '名</td>' +
@@ -1755,6 +1842,26 @@
             doPromote(row, promoteBtn);
           });
           actionTd.appendChild(promoteBtn);
+        } else if (!MODE && row.canMarkNoShow) {
+          // 通常時: 来店予定日を迎えた確定予約には「無断キャンセル」を記録するボタンを表示
+          var noShowBtn = document.createElement('button');
+          noShowBtn.className = 'noShowBtn';
+          noShowBtn.textContent = '無断キャンセル';
+          noShowBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            doMarkNoShow(row, noShowBtn, false);
+          });
+          actionTd.appendChild(noShowBtn);
+        } else if (!MODE && isNoShow) {
+          // 押し間違えたときのために、無断キャンセルの記録は取り消せるようにする
+          var undoBtn = document.createElement('button');
+          undoBtn.className = 'noShowUndoBtn';
+          undoBtn.textContent = '記録を取り消す';
+          undoBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            doMarkNoShow(row, undoBtn, true);
+          });
+          actionTd.appendChild(undoBtn);
         }
 
         tbody.appendChild(tr);
@@ -1786,6 +1893,37 @@
           btn.textContent = '繰り上げ確定';
         })
         .promoteWaitlistAdmin(TOKEN, row.rowIndex, false);
+    }
+
+    function doMarkNoShow(row, btn, undo) {
+      var message = undo
+        ? '無断キャンセルの記録を取り消して、予約確定に戻します。\n\n' + row.time + ' ' + row.name + '様 ' + row.partySize + '名'
+        : 'この予約を「無断キャンセル」として記録します。\n(連絡なくご来店がなかった場合に使います。後から取り消せます)\n\n' + row.time + ' ' + row.name + '様 ' + row.partySize + '名';
+      if (!confirm(message)) return;
+      var label = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = '処理中...';
+      google.script.run
+        .withSuccessHandler(function (res) {
+          if (res.authError) {
+            doLogout();
+            document.getElementById('loginMsg').textContent = res.message;
+            return;
+          }
+          if (res.success) {
+            loadList();
+          } else {
+            alert(res.message);
+            btn.disabled = false;
+            btn.textContent = label;
+          }
+        })
+        .withFailureHandler(function (err) {
+          alert('エラー: ' + err.message);
+          btn.disabled = false;
+          btn.textContent = label;
+        })
+        .markNoShowAdmin(TOKEN, row.rowIndex, undo);
     }
 
     function doCancel(row) {

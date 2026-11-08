@@ -387,8 +387,8 @@
         <label>お名前<span class="req">必須</span></label>
         <input type="text" id="name" required>
 
-        <label>フリガナ<span class="req">必須</span></label>
-        <input type="text" id="kana" required>
+        <label>フリガナ<span class="req" id="kanaReq" style="display:none;">必須</span></label>
+        <input type="text" id="kana">
 
         <div class="row2">
           <div>
@@ -396,13 +396,16 @@
             <input type="tel" id="phone" placeholder="090-1234-5678" required>
           </div>
           <div>
-            <label>メールアドレス<span class="req">必須</span></label>
-            <input type="email" id="email" required>
+            <label>メールアドレス<span class="req" id="emailReq" style="display:none;">必須</span></label>
+            <input type="email" id="email">
+            <div id="emailHint" style="font-size:12px; color:#888; margin-top:4px;">入力すると、確認メールと前日・当日のご案内が届きます</div>
           </div>
         </div>
 
         <label>ご要望</label>
         <textarea id="notes" placeholder="アレルギーや苦手な食材、お祝い等のご要望があればご記入ください"></textarea>
+
+        <p id="privacyNote" style="font-size:11.5px; line-height:1.6; color:#777; margin:14px 2px 0;"></p>
 
         <div class="navRow">
           <button type="button" class="backBtn" id="toStep2Back">‹ もどる</button>
@@ -414,7 +417,7 @@
 
     <div class="done-box" id="doneBox" style="display:none;">
       <div class="big" id="doneIcon"></div>
-      <div id="doneMsg" style="margin-top:8px; font-weight:bold;"></div>
+      <div id="doneMsg" style="margin-top:8px; font-weight:bold; white-space:pre-line;"></div>
       <button id="lineCloseBtn" type="button">LINEのトーク画面に戻る</button>
     </div>
   </div>
@@ -576,7 +579,38 @@
       maxDate.setDate(maxDate.getDate() + cfg.maxDaysAhead);
       document.getElementById('date').max = toDateStr(maxDate);
 
+      renderPrivacyNote(cfg);
+
+      document.getElementById('kanaReq').style.display = cfg.requireKana ? '' : 'none';
+      document.getElementById('emailReq').style.display = cfg.requireEmail ? '' : 'none';
+      document.getElementById('kana').required = !!cfg.requireKana;
+      document.getElementById('email').required = !!cfg.requireEmail;
+      document.getElementById('emailHint').textContent = cfg.requireEmail
+        ? '確認メールと、前日・当日のご案内をお送りします'
+        : '入力すると、確認メールと前日・当日のご案内が届きます';
+
       renderCourseCards(cfg.courses);
+    }
+
+    /**
+     * 送信ボタンの上に、個人情報の利用目的を表示する(個人情報保護法に基づく利用目的の通知)。
+     * 店舗がプライバシーポリシーのURLを設定していれば、そのページへのリンクも付ける。
+     */
+    function renderPrivacyNote(cfg) {
+      var el = document.getElementById('privacyNote');
+      el.textContent = (cfg.storeName || '当店') + 'は、ご入力いただいたお名前・ご連絡先・ご要望などを、' +
+        'ご予約の受付・確認と、ご予約に関するご連絡(前日・当日のご案内を含む)のためにのみ利用し、' +
+        '法令に基づく場合を除き第三者に提供しません。' +
+        (cfg.liffId ? 'LINEからご予約いただいた場合は、LINEの表示名も同じ目的で利用します。' : '');
+      if (cfg.privacyPolicyUrl) {
+        el.appendChild(document.createTextNode(' '));
+        var a = document.createElement('a');
+        a.href = cfg.privacyPolicyUrl;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        a.textContent = '個人情報の取り扱いについて';
+        el.appendChild(a);
+      }
     }
 
     function renderCourseCards(courses) {
@@ -719,9 +753,11 @@
       var duration = courseDef ? courseDef.duration : CFG.slotMinutes;
       var slot = CFG.slotMinutes;
 
-      var now = new Date();
-      var isToday = (dateStr === toDateStr(now));
-      var nowMin = now.getHours() * 60 + now.getMinutes();
+      // 受付締切(来店の何分前まで)を過ぎた時間帯は選べないようにする。
+      // 日付をまたぐ締切にも対応するため、各枠の日時そのものと比べる。
+      var dateParts = dateStr.split('-').map(Number);
+      var cutoffMs = (CFG.bookingCutoffMinutes || 0) * 60000;
+      var acceptFromMs = Date.now() + cutoffMs;
 
       var any = false;
       (schedule.periods || []).forEach(function (period) {
@@ -734,7 +770,8 @@
           }, 0);
           var remaining = CFG.seatsTotal - reservedAtSlot;
           var isFull = remaining < partySize;
-          var isPast = isToday && t <= nowMin;
+          var slotMs = new Date(dateParts[0], dateParts[1] - 1, dateParts[2], Math.floor(t / 60), t % 60).getTime();
+          var isPast = slotMs < acceptFromMs;
           var isWaitlistable = isFull && !isPast && CFG.waitlistEnabled;
           var isSelectable = !isPast && (!isFull || isWaitlistable);
 
@@ -766,6 +803,10 @@
     function updateSubmitUi() {
       var note = document.getElementById('waitlistNote');
       note.style.display = selectedIsWaitlist ? 'flex' : 'none';
+      // キャンセル待ちは空席のお知らせをメールで送るため、メールアドレスを必須として表示する
+      var emailRequired = !!(CFG && CFG.requireEmail) || selectedIsWaitlist;
+      document.getElementById('emailReq').style.display = emailRequired ? '' : 'none';
+      document.getElementById('email').required = emailRequired;
       setSubmitButtonState(selectedIsWaitlist);
     }
 
@@ -798,9 +839,15 @@
         lineDisplayName: lineProfile ? lineProfile.displayName : '',
       };
 
-      if (!form.name || !form.kana || !form.phone || !form.email || !form.date || !form.time || !form.course || !form.partySize) {
+      if (!form.name || !form.phone || !form.date || !form.time || !form.course || !form.partySize ||
+          (CFG.requireKana && !form.kana) || (CFG.requireEmail && !form.email)) {
         msg.className = 'error';
         msg.textContent = '必須項目を入力し、予約時間を選択してください。';
+        return;
+      }
+      if (form.acceptWaitlist && !form.email) {
+        msg.className = 'error';
+        msg.textContent = 'キャンセル待ちの登録には、空きのお知らせをお送りするメールアドレスが必要です。';
         return;
       }
 
