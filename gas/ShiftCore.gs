@@ -563,6 +563,148 @@ function shiftCoreFactory() {
     return currentAssignments();
   }
 
+  // ==================== 入力の検証 ====================
+  // すべて { ok: true, value } か { ok: false, message } を返す。
+
+  const TIME_RE = /^([01]\d|2[0-4]):([0-5]\d)$/;
+  const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+  const REQUEST_KINDS = ['unavailable', 'prefer_off', 'want'];
+  const RECURRING_KINDS = ['unavailable', 'prefer_off'];
+
+  function fail(message) { return { ok: false, message: message }; }
+
+  function cleanWeekdays(list) {
+    const seen = {};
+    return (Array.isArray(list) ? list : []).map(function (x) { return parseInt(x, 10); })
+      .filter(function (x) { if (!(x >= 0 && x <= 6) || seen[x]) return false; seen[x] = true; return true; })
+      .sort(function (a, b) { return a - b; });
+  }
+
+  function optionalNumber(v, max, message) {
+    if (v === null || v === undefined || String(v).trim() === '') return { ok: true, value: null };
+    const n = Number(v);
+    if (!isFinite(n) || n < 0 || (max !== null && n > max)) return fail(message);
+    return { ok: true, value: n };
+  }
+
+  function validateSettings(raw) {
+    raw = raw || {};
+    const positions = [];
+    const posList = Array.isArray(raw.positions) ? raw.positions : [];
+    for (let i = 0; i < posList.length; i++) {
+      const name = String(posList[i] || '').trim();
+      if (!name) return fail((i + 1) + '件目の担当名を入力してください。');
+      if (positions.indexOf(name) !== -1) return fail('担当名「' + name + '」が重複しています。');
+      positions.push(name);
+    }
+    const posKeys = positions.length ? positions : [''];
+
+    const slotsIn = Array.isArray(raw.slots) ? raw.slots : [];
+    if (!slotsIn.length) return fail('シフト枠を1つ以上設定してください。');
+    const slots = [];
+    const seenIds = {}, seenNames = {};
+    for (let i = 0; i < slotsIn.length; i++) {
+      const sl = slotsIn[i] || {};
+      const name = String(sl.name || '').trim();
+      if (!name) return fail((i + 1) + '件目の枠名を入力してください。');
+      if (seenNames[name]) return fail('枠名「' + name + '」が重複しています。');
+      seenNames[name] = true;
+      const start = String(sl.start || '').trim(), end = String(sl.end || '').trim();
+      if (!TIME_RE.test(start) || !TIME_RE.test(end)) return fail('「' + name + '」の時間は HH:MM の形式で入力してください。');
+      if (start === end) return fail('「' + name + '」の開始と終了が同じです。');
+      const id = String(sl.id || '').trim();
+      if (!id || seenIds[id]) return fail('「' + name + '」の内部IDが正しくありません。');
+      seenIds[id] = true;
+      const required = {};
+      let total = 0;
+      for (let j = 0; j < posKeys.length; j++) {
+        const n = parseInt((sl.required || {})[posKeys[j]], 10) || 0;
+        if (n < 0) return fail('「' + name + '」の必要人数は0人以上にしてください。');
+        required[posKeys[j]] = n;
+        total += n;
+      }
+      if (total < 1) return fail('「' + name + '」の必要人数を1人以上にしてください。');
+      slots.push({ id: id, name: name, start: start, end: end, weekdays: cleanWeekdays(sl.weekdays), required: required });
+    }
+
+    const pairRules = [];
+    const seenPairs = {};
+    const pairsIn = Array.isArray(raw.pairRules) ? raw.pairRules : [];
+    for (let i = 0; i < pairsIn.length; i++) {
+      const pr = pairsIn[i] || {};
+      const a = String(pr.a || ''), b = String(pr.b || '');
+      if (!a || !b) return fail((i + 1) + '件目の組み合わせのスタッフを2人選んでください。');
+      if (a === b) return fail('同じスタッフ同士の組み合わせは設定できません。');
+      const key = a < b ? a + '|' + b : b + '|' + a;
+      if (seenPairs[key]) continue;
+      seenPairs[key] = true;
+      pairRules.push({ a: a, b: b, type: 'avoid' });
+    }
+
+    const minVet = parseInt(raw.minVeteranPerSlot, 10) || 0;
+    if (minVet < 0) return fail('ベテランの人数は0人以上にしてください。');
+    return { ok: true, value: { positions: positions, slots: slots, pairRules: pairRules, minVeteranPerSlot: minVet } };
+  }
+
+  function validateStaff(raw, settings) {
+    raw = raw || {};
+    const name = String(raw.name || '').trim();
+    if (!name) return fail('スタッフの名前を入力してください。');
+    const allowed = (settings && settings.positions) || [];
+    const positions = (Array.isArray(raw.positions) ? raw.positions : [])
+      .map(function (x) { return String(x); })
+      .filter(function (x, i, arr) { return allowed.indexOf(x) !== -1 && arr.indexOf(x) === i; });
+    const target = optionalNumber(raw.targetDays, 7, '週の目安日数は0〜7の数字で入力してください。');
+    if (!target.ok) return target;
+    const maxDays = optionalNumber(raw.maxDays, 7, '週の上限日数は0〜7の数字で入力してください。');
+    if (!maxDays.ok) return maxDays;
+    const maxHours = optionalNumber(raw.maxHours, null, '週の上限時間は0以上の数字で入力してください。');
+    if (!maxHours.ok) return maxHours;
+    return { ok: true, value: {
+      id: String(raw.id || ''), name: name, positions: positions, veteran: !!raw.veteran,
+      targetDays: target.value, maxDays: maxDays.value, maxHours: maxHours.value,
+      active: raw.active === undefined ? true : !!raw.active, note: String(raw.note || ''),
+    } };
+  }
+
+  function validateRequests(list, from, to, settings, staffIds) {
+    const slotIds = {};
+    ((settings && settings.slots) || []).forEach(function (sl) { slotIds[sl.id] = true; });
+    const byKey = {};
+    const order = [];
+    const items = Array.isArray(list) ? list : [];
+    for (let i = 0; i < items.length; i++) {
+      const r = items[i] || {};
+      const date = String(r.date || '');
+      if (!DATE_RE.test(date) || date < from || date > to) return fail('希望の日付が対象期間の外です。');
+      if (staffIds.indexOf(r.staffId) === -1) return fail('希望のスタッフが見つかりません。');
+      const slotId = String(r.slotId || '');
+      if (slotId && !slotIds[slotId]) return fail('希望の枠が見つかりません。');
+      if (REQUEST_KINDS.indexOf(r.kind) === -1) return fail('希望の種類が正しくありません。');
+      const key = r.staffId + '|' + date + '|' + slotId;
+      if (!byKey[key]) order.push(key);
+      byKey[key] = { date: date, staffId: r.staffId, slotId: slotId, kind: r.kind, note: String(r.note || '') };
+    }
+    return { ok: true, value: order.map(function (k) { return byKey[k]; }) };
+  }
+
+  function validateRecurring(list, settings) {
+    const slotIds = {};
+    ((settings && settings.slots) || []).forEach(function (sl) { slotIds[sl.id] = true; });
+    const out = [];
+    const items = Array.isArray(list) ? list : [];
+    for (let i = 0; i < items.length; i++) {
+      const r = items[i] || {};
+      const weekdays = cleanWeekdays(r.weekdays);
+      if (!weekdays.length) return fail('いつもの条件の曜日を1つ以上選んでください。');
+      const slotId = String(r.slotId || '');
+      if (slotId && !slotIds[slotId]) return fail('いつもの条件の枠が見つかりません。');
+      if (RECURRING_KINDS.indexOf(r.kind) === -1) return fail('いつもの条件の種類が正しくありません。');
+      out.push({ staffId: String(r.staffId || ''), weekdays: weekdays, slotId: slotId, kind: r.kind, note: String(r.note || '') });
+    }
+    return { ok: true, value: out };
+  }
+
   return {
     pad2: pad2,
     hhmmToMin: hhmmToMin,
@@ -581,5 +723,9 @@ function shiftCoreFactory() {
     evaluate: evaluate,
     comparePenalty: comparePenalty,
     solve: solve,
+    validateSettings: validateSettings,
+    validateStaff: validateStaff,
+    validateRequests: validateRequests,
+    validateRecurring: validateRecurring,
   };
 }
