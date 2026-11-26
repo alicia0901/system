@@ -55,17 +55,21 @@ async function openShiftPage(opts) {
 
   const html = renderShiftHtml(ctx); // ブラウザ起動前に読む(失敗時にブラウザを残さない)
   const browser = await playwright.chromium.launch();
-  const page = await browser.newPage({ viewport: opts.viewport || { width: 1280, height: 800 } });
-  page.setDefaultTimeout(5000);
-  page.on('pageerror', (err) => { page.__errors = (page.__errors || []).concat(String(err)); });
-  page.on('dialog', (d) => d.accept());
-  await page.exposeFunction('__callServer', (name, argsJson) => {
-    const args = JSON.parse(argsJson);
-    return JSON.stringify(call(name, ...args));
-  });
-  await page.addInitScript(RUN_STUB);
-  await page.route(PAGE_URL, (route) => route.fulfill({ contentType: 'text/html; charset=utf-8', body: html }));
-  await page.goto(PAGE_URL);
+
+  /** ページに google.script.run のつなぎ込みをして shift.html を開く(同じサーバ状態を共有する) */
+  async function attach(page) {
+    page.setDefaultTimeout(5000);
+    page.on('pageerror', (err) => { errors.push(String(err)); });
+    page.on('dialog', (d) => d.accept());
+    await page.exposeFunction('__callServer', (name, argsJson) => JSON.stringify(call(name, ...JSON.parse(argsJson))));
+    await page.addInitScript(RUN_STUB);
+    await page.route(PAGE_URL, (route) => route.fulfill({ contentType: 'text/html; charset=utf-8', body: html }));
+    await page.goto(PAGE_URL);
+    return page;
+  }
+  const errors = [];
+  const page = await attach(await browser.newPage(Object.assign(
+    { viewport: opts.viewport || { width: 1280, height: 800 } }, opts.pageOptions || {})));
 
   async function login() {
     await page.fill('#password', 'changeme');
@@ -73,7 +77,7 @@ async function openShiftPage(opts) {
     await page.waitForSelector('#appView', { state: 'visible' });
   }
   async function close() { await browser.close(); }
-  return { browser, page, mock, call, login, close, errors: () => page.__errors || [] };
+  return { browser, page, mock, call, login, close, attach, errors: () => errors };
 }
 
 module.exports = { openShiftPage, renderShiftHtml, hasPlaywright: !!playwright };
