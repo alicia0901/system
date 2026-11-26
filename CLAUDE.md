@@ -8,7 +8,12 @@ Google Apps Script (GAS) だけで完結する飲食店向け予約システム�
 
 ## コマンド
 
-ビルド/テストの仕組みはない(GAS はエディタに貼り付けて実行するか `clasp` で push するのみ)。
+ビルドの仕組みはない(GAS はエディタに貼り付けて実行するか `clasp` で push するのみ)。シフト表(`Shift.gs` / `ShiftCore.gs` / `shift.html`)には Node 標準のテストがある(npm 依存なし。画面テストは事前インストール済み Playwright を使い、無ければスキップ):
+
+```bash
+node --test 'tests/*.test.js'
+```
+
 
 ```bash
 # 新店舗用のコード生成(Google側には何も作らない)
@@ -73,6 +78,18 @@ clasp 初回セットアップ(運用担当者アカウントで1回のみ): `np
 - `CONFIG.REMINDER_DAY_BEFORE_ENABLED` / `REMINDER_SAME_DAY_ENABLED` は個別のON/OFFのみを制御し、トリガー自体の有無とは独立している(`false` でもトリガーは残るが、`sendRemindersOfKind` の先頭で何もせず終了する)。
 - 日付の比較には `formatDateStr(date)`(`Utilities.formatDate` を `CONFIG.TIMEZONE` で使うラッパー)を使うこと。既存の `getConfirmedRangesForDate` 等と同様、シートの日付セルは `String(row[COL.DATE])` で文字列として扱う前提になっている。
 - 他店舗展開時は、`create-store.js` の再実行や `clasp push` だけではトリガーは複製されない。新規店舗ごとに、その店舗の Apps Script エディタで `setupReminderTrigger` を1回実行する必要がある(README.md 参照)。
+
+### シフト表(`?page=shift`)
+
+店長が条件を入れるとシフト案を自動作成し、手直し・保存・印刷できるページ。設計は `docs/superpowers/specs/2026-11-26-shift-schedule-design.md`。
+
+- `gas/ShiftCore.gs` は `function shiftCoreFactory()` **1つだけ**を定義し、中で GAS API も外部の変数・関数(`CONFIG` 等)も使わない。サーバ(`Shift.gs`)は `shiftCoreFactory()` を呼び、画面(`shift.html`)には `doGet` がテンプレート変数 `shiftCoreSource = shiftCoreFactory.toString()` で同じコードを埋め込む(警告計算をサーバと画面で一致させるため)。ここに GAS API や外部参照を足すと画面側で壊れる。
+- 中身: 日付ユーティリティ、`buildCells`(日×枠×担当のセル展開。休業日は枠なし、特別な日 `business[date].special` でその曜日の枠がなければ営業時間と重なる枠)、`buildProblem`、`availability`(その日の枠指定 > その日の終日 > 毎週の枠指定 > 毎週の終日)、`evaluate`(警告・罰点 `[hard, shortage, avoid, preferOff, veteran, fairness, -want]`・集計。罰点は配列のまま `comparePenalty` で先頭から比較)、`solve`(貪欲法 + 局所探索。既定20秒、5000回続けて改善しなければ打ち切り)、入力検証。
+- `Shift.gs` の保存先: 設定はプロパティ `SHIFT_SETTINGS`、スタッフ・希望・定期条件・割り当て・日別枠は `シフト_*` シート。置き換え保存は `shiftWithLock`(`LockService`)の中で全行読み直し→書き直し。日付セルは `Date` で返ってきても `shiftCellDate` で `'YYYY-MM-DD'` にする。
+- 割り当ての `pinned: true` は「固定」。`kind: 'exclude'` は「この人をこの枠から外した」固定。`solve` は固定を残し、固定でないものは作り直す。自動作成は絶対条件(出られない・担当外・同じ人の時間重複・週の上限・除外)を破らないが、手直しの固定は破っていても受け入れて警告を出す。
+- 週の上限は月曜始まりで、期間の端の週は期間外の保存済み割り当て(`outsideAssignments`)も数える。
+- 休業判定は `getBusinessHoursForDate` 経由(`special` は `getBusinessSettings().specialDays` から)。
+- ファイルを増やしたら `setup/create-store.js` のコピー対象と `gas/.claspignore` の許可リストにも追加すること。
 
 ### Windows での clasp 呼び出しの注意
 
