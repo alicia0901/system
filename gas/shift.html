@@ -246,7 +246,20 @@
       if (STATE.data && RENDER[CURRENT_TAB]) RENDER[CURRENT_TAB]();
     }
 
+    /** タブを切り替える。離れるタブに未保存の変更があれば確認し、破棄したら元に戻す */
     function showTab(name) {
+      if (name !== CURRENT_TAB && STATE.data) {
+        var dirty = (CURRENT_TAB === 'requests' && STATE.reqDirty) || (CURRENT_TAB === 'grid' && STATE.gridDirty);
+        if (dirty) {
+          if (!confirm('保存していない変更があります。破棄しますか?')) return;
+          if (CURRENT_TAB === 'requests') { STATE.requests = STATE.data.requests.slice(); STATE.reqDirty = false; }
+          if (CURRENT_TAB === 'grid') {
+            STATE.assignments = STATE.data.assignments.slice();
+            STATE.dayOverrides = STATE.data.dayOverrides.slice();
+            STATE.gridDirty = false;
+          }
+        }
+      }
       CURRENT_TAB = name;
       document.querySelectorAll('[data-tab]').forEach(function (b) { b.classList.toggle('active', b.dataset.tab === name); });
       document.querySelectorAll('.tabPanel').forEach(function (p) { p.classList.toggle('active', p.id === 'tab-' + name); });
@@ -548,6 +561,132 @@
         el('settingsSaveBtn').disabled = false;
         if (!res.success) { showMsg('settingsMsg', res.message, true); return; }
         reload().then(function () { showMsg('settingsMsg', '保存しました。', false); });
+      });
+    }
+  </script>
+  <style>
+    /* ---- 希望・休み ---- */
+    .reqCal { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    .reqCal th { font-size: 12px; color: var(--muted); padding: 4px; }
+    .reqCal td { border: 1px solid var(--border); vertical-align: top; height: 64px; padding: 4px; font-size: 12px; }
+    .reqDay { cursor: pointer; background: #fff; }
+    .reqDay:hover { background: var(--bg); }
+    .reqDay.selected { outline: 2px solid var(--main); outline-offset: -2px; }
+    .reqDay.closed { background: #f2f2f2; color: #999; cursor: default; }
+    .reqDay .d { font-weight: bold; }
+    .reqTag { display: inline-block; margin: 1px 2px 0 0; padding: 0 4px; border-radius: 4px; background: var(--danger-bg); color: var(--danger); }
+    .reqTag.prefer_off { background: var(--warn-bg); color: var(--warn); }
+    .reqTag.want { background: #e6f4ee; color: var(--ok); }
+    .reqTag.fromRecurring { opacity: .45; }
+    #reqPicker { border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin: 12px 0; background: #fffdfb; }
+    #reqPicker .editRow span.slotLbl { min-width: 9em; }
+  </style>
+  <script>
+    // ==================== 希望・休み タブ ====================
+    var REQ_TAG = { unavailable: '×', prefer_off: '休', want: '◎' };
+    var REQ_STAFF = '';
+    var REQ_DATE = '';
+
+    function dayRequest(staffId, date, slotId) {
+      return STATE.requests.filter(function (r) { return r.staffId === staffId && r.date === date && (r.slotId || '') === slotId; })[0];
+    }
+    function recurringKind(staffId, date, slotId) {
+      var wd = Core.weekdayOf(date);
+      var rule = STATE.data.recurring.filter(function (r) {
+        return r.staffId === staffId && r.weekdays.indexOf(wd) !== -1 && (r.slotId || '') === slotId;
+      })[0];
+      return rule ? rule.kind : null;
+    }
+
+    /** その日のラベル。その日だけの希望は濃く、毎週の条件だけによるものは薄く出す */
+    function dayTags(staffId, date) {
+      var keys = [''].concat(STATE.data.settings.slots.map(function (s) { return s.id; }));
+      return keys.map(function (slotId) {
+        var dated = dayRequest(staffId, date, slotId);
+        var kind = dated ? dated.kind : recurringKind(staffId, date, slotId);
+        if (!kind) return '';
+        return '<span class="reqTag ' + kind + (dated ? '' : ' fromRecurring') + '">' +
+          esc((slotId ? slotName(slotId) : '') + REQ_TAG[kind]) + '</span>';
+      }).join('');
+    }
+
+    RENDER.requests = function () {
+      var active = STATE.data.staff.filter(function (s) { return s.active; });
+      if (!active.some(function (s) { return s.id === REQ_STAFF; })) REQ_STAFF = active.length ? active[0].id : '';
+      var html = '<h2>希望・休み</h2><p class="note">スタッフを選んで、日付をタップして入力します。' +
+        '× 出られない / 休 できれば休み / ◎ 出たい。薄い表示はスタッフ画面の「いつもの条件」によるものです。</p>';
+      if (!active.length) {
+        el('tab-requests').innerHTML = html + '<p>先に「スタッフ」タブでスタッフを追加してください。</p>';
+        return;
+      }
+      html += '<div class="row"><label for="reqStaff" style="margin:0;">スタッフ</label><select id="reqStaff">' +
+        active.map(function (s) { return '<option value="' + esc(s.id) + '"' + (s.id === REQ_STAFF ? ' selected' : '') + '>' + esc(s.name) + '</option>'; }).join('') +
+        '</select></div>';
+      html += '<div id="reqCalendar"></div><div id="reqPickerWrap"></div>';
+      html += '<div class="buttons"><button id="reqSaveBtn" class="primary">希望を保存</button></div><div id="reqMsg" class="msg"></div>';
+      el('tab-requests').innerHTML = html;
+      el('reqStaff').addEventListener('change', function () { REQ_STAFF = this.value; REQ_DATE = ''; renderReqCalendar(); });
+      el('reqSaveBtn').addEventListener('click', saveRequestsNow);
+      renderReqCalendar();
+    };
+
+    function renderReqCalendar() {
+      var dates = Core.listDates(STATE.from, STATE.to);
+      var start = Core.mondayOf(STATE.from);
+      var end = Core.addDays(Core.mondayOf(STATE.to), 6);
+      var all = Core.listDates(start, end);
+      var html = '<table class="reqCal"><thead><tr>' + [1, 2, 3, 4, 5, 6, 0].map(function (w) { return '<th>' + WEEKDAY_LABELS[w] + '</th>'; }).join('') + '</tr></thead><tbody>';
+      for (var i = 0; i < all.length; i += 7) {
+        html += '<tr>' + all.slice(i, i + 7).map(function (date) {
+          if (dates.indexOf(date) === -1) return '<td></td>';
+          var b = STATE.data.business[date] || {};
+          if (b.closed) return '<td class="reqDay closed" data-date="' + date + '"><span class="d">' + Core.formatMD(date) + '</span><br>休業</td>';
+          return '<td class="reqDay' + (date === REQ_DATE ? ' selected' : '') + '" data-date="' + date + '"><span class="d">' +
+            Core.formatMD(date) + '</span><br>' + dayTags(REQ_STAFF, date) + '</td>';
+        }).join('') + '</tr>';
+      }
+      el('reqCalendar').innerHTML = html + '</tbody></table>';
+      document.querySelectorAll('.reqDay:not(.closed)').forEach(function (td) {
+        td.addEventListener('click', function () { REQ_DATE = td.dataset.date; renderReqCalendar(); renderReqPicker(); });
+      });
+    }
+
+    function renderReqPicker() {
+      if (!REQ_DATE) { el('reqPickerWrap').innerHTML = ''; return; }
+      var rows = [{ id: '', name: '終日' }].concat(STATE.data.settings.slots);
+      var html = '<div id="reqPicker"><b>' + esc(staffName(REQ_STAFF)) + ' さん ' + dayLabel(REQ_DATE) + '</b>';
+      rows.forEach(function (row) {
+        var dated = dayRequest(REQ_STAFF, REQ_DATE, row.id);
+        var rec = recurringKind(REQ_STAFF, REQ_DATE, row.id);
+        html += '<div class="editRow"><span class="slotLbl">' + esc(row.name) + '</span><select class="reqKind" data-slot="' + esc(row.id) + '">' +
+          '<option value="">指定なし' + (rec ? '(いつもは「' + KIND_LABELS[rec] + '」)' : '') + '</option>' +
+          ['unavailable', 'prefer_off', 'want'].map(function (k) {
+            return '<option value="' + k + '"' + (dated && dated.kind === k ? ' selected' : '') + '>' + KIND_LABELS[k] + '</option>';
+          }).join('') + '</select></div>';
+      });
+      html += '<button id="reqPickerClose" class="small">閉じる</button></div>';
+      el('reqPickerWrap').innerHTML = html;
+      document.querySelectorAll('#reqPicker select.reqKind').forEach(function (sel) {
+        sel.addEventListener('change', function () { setRequest(REQ_STAFF, REQ_DATE, sel.dataset.slot, sel.value); });
+      });
+      el('reqPickerClose').addEventListener('click', function () { REQ_DATE = ''; renderReqCalendar(); renderReqPicker(); });
+    }
+
+    function setRequest(staffId, date, slotId, kind) {
+      STATE.requests = STATE.requests.filter(function (r) {
+        return !(r.staffId === staffId && r.date === date && (r.slotId || '') === slotId);
+      });
+      if (kind) STATE.requests.push({ date: date, staffId: staffId, slotId: slotId, kind: kind, note: '' });
+      STATE.reqDirty = true;
+      renderReqCalendar();
+    }
+
+    function saveRequestsNow() {
+      el('reqSaveBtn').disabled = true;
+      callServer('saveRequests', TOKEN, STATE.from, STATE.to, STATE.requests).then(function (res) {
+        el('reqSaveBtn').disabled = false;
+        if (!res.success) { showMsg('reqMsg', res.message, true); return; }
+        reload().then(function () { showMsg('reqMsg', '保存しました。', false); });
       });
     }
   </script>

@@ -208,3 +208,102 @@ ui('検証エラーがそのまま表示される', async () => {
     assert.equal(await s.page.textContent('#settingsMsg'), '1件目の枠名を入力してください。');
   } finally { await s.close(); }
 });
+
+// ==================== Task 7: 希望・休み ====================
+
+const NOV = ['2026-11-01', '2026-11-30'];
+async function openPeriod(s, from, to) {
+  await s.page.fill('#periodFrom', from);
+  await s.page.fill('#periodTo', to);
+  await s.page.click('#periodLoadBtn');
+  await s.page.waitForFunction(([f]) => document.getElementById('periodMsg').textContent === '' &&
+    window.STATE && STATE.from === f, [from]);
+}
+const seedTwo = (ids) => (call) => {
+  call('saveShiftSettings', 'seed', SIMPLE_SETTINGS);
+  ['A', 'B'].forEach((n) => { ids[n] = call('saveStaffMember', 'seed', staffIn(n)).staff.id; });
+};
+
+ui('11/5 ランチだけ出られないを入力して保存', async () => {
+  const ids = {};
+  const s = await openShiftPage({ seed: seedTwo(ids) });
+  try {
+    await s.login();
+    await s.page.click('[data-tab="requests"]');
+    await openPeriod(s, NOV[0], NOV[1]);
+    await s.page.selectOption('#reqStaff', ids.A);
+    await s.page.click('.reqDay[data-date="2026-11-05"]');
+    await s.page.selectOption('#reqPicker select.reqKind[data-slot="L"]', 'unavailable');
+    assert.ok((await s.page.textContent('.reqDay[data-date="2026-11-05"]')).includes('ランチ×'));
+    await s.page.click('#reqSaveBtn');
+    await waitMsg(s, 'reqMsg', '保存しました');
+    const reqs = s.call('getShiftBootstrap', 'seed', NOV[0], NOV[1]).requests;
+    assert.deepEqual(reqs.map((r) => [r.date, r.staffId, r.slotId, r.kind]), [['2026-11-05', ids.A, 'L', 'unavailable']]);
+    assert.deepEqual(s.errors(), []);
+  } finally { await s.close(); }
+});
+
+ui('定期条件は薄く表示され、その日の希望で上書きできる', async () => {
+  const ids = {};
+  const s = await openShiftPage({ seed: (call, mock) => {
+    seedTwo(ids)(call, mock);
+    call('saveRecurringRules', 'seed', ids.A, [{ weekdays: [4], slotId: '', kind: 'unavailable', note: '' }]);
+  } });
+  try {
+    await s.login();
+    await s.page.click('[data-tab="requests"]');
+    await openPeriod(s, NOV[0], NOV[1]);
+    await s.page.selectOption('#reqStaff', ids.A);
+    const day = s.page.locator('.reqDay[data-date="2026-11-05"]');
+    assert.ok((await day.textContent()).includes('×'));
+    assert.equal(await day.locator('.fromRecurring').count(), 1);
+    await day.click();
+    await s.page.selectOption('#reqPicker select.reqKind[data-slot=""]', 'want');
+    assert.ok((await day.textContent()).includes('◎'));
+    assert.equal(await day.locator('.fromRecurring').count(), 0);
+    // 休業日(月曜)は「休業」
+    assert.ok((await s.page.textContent('.reqDay[data-date="2026-11-02"]')).includes('休業'));
+  } finally { await s.close(); }
+});
+
+ui('他のスタッフの希望も消えずに保存される', async () => {
+  const ids = {};
+  const s = await openShiftPage({ seed: seedTwo(ids) });
+  try {
+    await s.login();
+    await s.page.click('[data-tab="requests"]');
+    await openPeriod(s, NOV[0], NOV[1]);
+    await s.page.selectOption('#reqStaff', ids.A);
+    await s.page.click('.reqDay[data-date="2026-11-05"]');
+    await s.page.selectOption('#reqPicker select.reqKind[data-slot=""]', 'prefer_off');
+    await s.page.selectOption('#reqStaff', ids.B);
+    await s.page.click('.reqDay[data-date="2026-11-06"]');
+    await s.page.selectOption('#reqPicker select.reqKind[data-slot=""]', 'unavailable');
+    await s.page.click('#reqSaveBtn');
+    await waitMsg(s, 'reqMsg', '保存しました');
+    const reqs = s.call('getShiftBootstrap', 'seed', NOV[0], NOV[1]).requests;
+    assert.deepEqual(reqs.map((r) => [r.date, r.staffId, r.kind]).sort(),
+      [['2026-11-05', ids.A, 'prefer_off'], ['2026-11-06', ids.B, 'unavailable']]);
+  } finally { await s.close(); }
+});
+
+ui('未保存のまま別タブへ移ると確認が出て、破棄される', async () => {
+  const ids = {};
+  const s = await openShiftPage({ seed: seedTwo(ids) });
+  try {
+    await s.login();
+    await s.page.click('[data-tab="requests"]');
+    await openPeriod(s, NOV[0], NOV[1]);
+    await s.page.selectOption('#reqStaff', ids.A);
+    await s.page.click('.reqDay[data-date="2026-11-05"]');
+    await s.page.selectOption('#reqPicker select.reqKind[data-slot=""]', 'prefer_off');
+    let asked = '';
+    s.page.removeAllListeners('dialog');
+    s.page.on('dialog', (d) => { asked = d.message(); d.accept(); });
+    await s.page.click('[data-tab="staff"]');
+    assert.equal(asked, '保存していない変更があります。破棄しますか?');
+    await s.page.click('[data-tab="requests"]');
+    await s.page.selectOption('#reqStaff', ids.A);
+    assert.ok(!(await s.page.textContent('.reqDay[data-date="2026-11-05"]')).includes('休'));
+  } finally { await s.close(); }
+});
