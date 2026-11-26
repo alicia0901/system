@@ -206,3 +206,32 @@ test('generateShift は保存せずに案を返す', () => {
   assert.equal(r.penalty.length, 7);
   assert.equal(mock.sheets('シフト_割り当て').length, before);
 });
+
+// ==================== 最終レビューでの修正 ====================
+
+test('削除した枠への希望・定期条件は bootstrap で捨て、希望の保存が続けられる', () => {
+  const { call } = setup();
+  call('saveShiftSettings', 't', SETTINGS);
+  const a = call('saveStaffMember', 't', staffInput('A')).staff;
+  call('saveRequests', 't', '2026-12-01', '2026-12-07', [{ date: '2026-12-05', staffId: a.id, slotId: 'D', kind: 'unavailable', note: '' }]);
+  call('saveRecurringRules', 't', a.id, [{ weekdays: [1], slotId: 'D', kind: 'unavailable', note: '' }]);
+  call('saveShiftSettings', 't', Object.assign({}, SETTINGS, { slots: [SETTINGS.slots[0]] })); // D を削除
+  const b = call('getShiftBootstrap', 't', '2026-12-01', '2026-12-07');
+  assert.equal(b.requests.length, 0);
+  assert.equal(b.recurring.length, 0);
+  const more = b.requests.concat([{ date: '2026-12-06', staffId: a.id, slotId: '', kind: 'want', note: '' }]);
+  assert.equal(call('saveRequests', 't', '2026-12-01', '2026-12-07', more).success, true);
+});
+
+test('generateShift は渡された日別枠で作り、保存しない', () => {
+  const { mock, call } = setup();
+  call('saveShiftSettings', 't', SETTINGS);
+  call('saveStaffMember', 't', staffInput('A'));
+  call('saveStaffMember', 't', staffInput('B'));
+  const r = call('generateShift', 't', '2026-12-01', '2026-12-01', [], [{ date: '2026-12-01', slotId: 'D', state: 'off' }]);
+  assert.equal(r.success, true);
+  assert.deepEqual(r.assignments.map((x) => x.slotId), ['L']);
+  // 読み込み時に見出し行だけのシートは作られるが、データ行は書かれない
+  assert.equal(mock.sheets('シフト_割り当て').length, 1);
+  assert.equal(mock.sheets('シフト_日別枠').length, 1);
+});

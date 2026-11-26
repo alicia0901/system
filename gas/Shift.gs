@@ -151,13 +151,19 @@ function saveRequests(token, from, to, requests) {
 /**
  * シフト案を自動で作る(保存はしない)。要ログイン。
  * currentAssignments のうち固定(pinned)のものはそのまま残す。
+ * dayOverrides を渡すと、保存済みの日別枠の代わりにそれを使う(画面で変えたまま未保存の日別枠)。
  */
-function generateShift(token, from, to, currentAssignments) {
+function generateShift(token, from, to, currentAssignments, dayOverrides) {
   if (!isValidAdminToken(token)) return SHIFT_AUTH_ERROR;
   const periodError = shiftValidatePeriod(from, to);
   if (periodError) return { success: false, message: periodError };
   const core = shiftCoreFactory();
   const data = shiftLoadData(from, to);
+  if (Array.isArray(dayOverrides)) {
+    const cleaned = shiftCleanDayOverrides(dayOverrides, from, to);
+    if (!cleaned) return { success: false, message: '日別の枠の内容が正しくありません。' };
+    data.dayOverrides = cleaned;
+  }
   const problem = core.buildProblem({
     from: from, to: to, settings: data.settings, staff: data.staff, requests: data.requests,
     recurring: data.recurring, business: data.business, dayOverrides: data.dayOverrides,
@@ -186,15 +192,8 @@ function saveShiftPeriod(token, from, to, assignments, dayOverrides) {
     cleanAssigns.push({ date: a.date, slotId: String(a.slotId), position: String(a.position || ''),
       staffId: String(a.staffId), kind: a.kind, pinned: !!a.pinned });
   }
-  const cleanOverrides = [];
-  const overridesIn = dayOverrides || [];
-  for (let i = 0; i < overridesIn.length; i++) {
-    const o = overridesIn[i] || {};
-    if (!shiftInPeriod(o.date, from, to) || !o.slotId || !SHIFT_DAY_STATE_LABELS[o.state]) {
-      return { success: false, message: '日別の枠の内容が正しくありません。' };
-    }
-    cleanOverrides.push({ date: o.date, slotId: String(o.slotId), state: o.state });
-  }
+  const cleanOverrides = shiftCleanDayOverrides(dayOverrides || [], from, to);
+  if (!cleanOverrides) return { success: false, message: '日別の枠の内容が正しくありません。' };
 
   return shiftWithLock(function () {
     const now = new Date();
@@ -206,6 +205,17 @@ function saveShiftPeriod(token, from, to, assignments, dayOverrides) {
     shiftWriteAll(SHIFT_SHEETS.DAY_SLOTS, keptOverrides.concat(cleanOverrides).map(shiftDayOverrideToRow));
     return { success: true };
   });
+}
+
+/** 日別枠の入力を整える。不正な行があれば null */
+function shiftCleanDayOverrides(list, from, to) {
+  const out = [];
+  for (let i = 0; i < list.length; i++) {
+    const o = list[i] || {};
+    if (!shiftInPeriod(o.date, from, to) || !o.slotId || !SHIFT_DAY_STATE_LABELS[o.state]) return null;
+    out.push({ date: o.date, slotId: String(o.slotId), state: o.state });
+  }
+  return out;
 }
 
 // ==================== 読み込み ====================
@@ -249,8 +259,11 @@ function shiftLoadData(from, to) {
   return {
     settings: settings,
     staff: shiftReadStaff(),
-    requests: shiftReadRequests().filter(function (r) { return shiftInPeriod(r.date, from, to); }),
-    recurring: shiftReadRecurring(),
+    // 設定から消した枠を指す希望・定期条件は捨てる(画面で消せず、保存の検証で止まってしまうため)
+    requests: shiftReadRequests().filter(function (r) {
+      return shiftInPeriod(r.date, from, to) && (!r.slotId || slotIds[r.slotId]);
+    }),
+    recurring: shiftReadRecurring().filter(function (r) { return !r.slotId || slotIds[r.slotId]; }),
     business: business,
     dayOverrides: shiftReadDayOverrides().filter(function (o) { return shiftInPeriod(o.date, from, to) && slotIds[o.slotId]; }),
     assignments: allAssigns.filter(function (a) { return shiftInPeriod(a.date, from, to); }).map(strip),

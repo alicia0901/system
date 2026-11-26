@@ -84,11 +84,13 @@ clasp 初回セットアップ(運用担当者アカウントで1回のみ): `np
 店長が条件を入れるとシフト案を自動作成し、手直し・保存・印刷できるページ。設計は `docs/superpowers/specs/2026-11-26-shift-schedule-design.md`。
 
 - `gas/ShiftCore.gs` は `function shiftCoreFactory()` **1つだけ**を定義し、中で GAS API も外部の変数・関数(`CONFIG` 等)も使わない。サーバ(`Shift.gs`)は `shiftCoreFactory()` を呼び、画面(`shift.html`)には `doGet` がテンプレート変数 `shiftCoreSource = shiftCoreFactory.toString()` で同じコードを埋め込む(警告計算をサーバと画面で一致させるため)。ここに GAS API や外部参照を足すと画面側で壊れる。
-- 中身: 日付ユーティリティ、`buildCells`(日×枠×担当のセル展開。休業日は枠なし、特別な日 `business[date].special` でその曜日の枠がなければ営業時間と重なる枠)、`buildProblem`、`availability`(その日の枠指定 > その日の終日 > 毎週の枠指定 > 毎週の終日)、`evaluate`(警告・罰点 `[hard, shortage, avoid, preferOff, veteran, fairness, -want]`・集計。罰点は配列のまま `comparePenalty` で先頭から比較)、`solve`(貪欲法 + 局所探索。既定20秒、5000回続けて改善しなければ打ち切り)、入力検証。
+- 中身: 日付ユーティリティ、`buildCells`(日×枠×担当のセル展開。休業日は枠なし、特別な日 `business[date].special` でその曜日の枠がなければ営業時間と重なる枠)、`buildProblem`、`availability`(その日の枠指定 > その日の終日 > 毎週の枠指定 > 毎週の終日)、`evaluate`(警告・罰点 `[hard, shortage, avoid, preferOff, veteran, fairness, -want]`・集計。罰点は配列のまま `comparePenalty` で先頭から比較)、`solve`(貪欲法 + 局所探索。貪欲法は関係する項目だけの簡易採点で速く回し、週の上限日数がある人は同じ日にまとめる。局所探索は `evaluate` 全体で比較し、既定20秒、5000回続けて改善しなければ打ち切り)、入力検証。
 - `Shift.gs` の保存先: 設定はプロパティ `SHIFT_SETTINGS`、スタッフ・希望・定期条件・割り当て・日別枠は `シフト_*` シート。置き換え保存は `shiftWithLock`(`LockService`)の中で全行読み直し→書き直し。日付セルは `Date` で返ってきても `shiftCellDate` で `'YYYY-MM-DD'` にする。
 - 割り当ての `pinned: true` は「固定」。`kind: 'exclude'` は「この人をこの枠から外した」固定。`solve` は固定を残し、固定でないものは作り直す。自動作成は絶対条件(出られない・担当外・同じ人の時間重複・週の上限・除外)を破らないが、手直しの固定は破っていても受け入れて警告を出す。
 - 週の上限は月曜始まりで、期間の端の週は期間外の保存済み割り当て(`outsideAssignments`)も数える。
 - 休業判定は `getBusinessHoursForDate` 経由(`special` は `getBusinessSettings().specialDays` から)。
+- 設定から消した枠を指す希望・定期条件・割り当て・日別枠は `shiftLoadData` が読み込み時に捨てる。在籍外スタッフの割り当ては評価にも表示にも使わない。
+- `generateShift` は画面上の日別枠(未保存を含む)を引数で受け取り、何も保存しない。
 - ファイルを増やしたら `setup/create-store.js` のコピー対象と `gas/.claspignore` の許可リストにも追加すること。
 
 ### Windows での clasp 呼び出しの注意

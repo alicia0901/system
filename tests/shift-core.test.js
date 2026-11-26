@@ -223,10 +223,10 @@ test('evaluate: expectedDays と fairness', () => {
   const p = fixture({ staffOverrides: { A: { targetDays: 1 }, B: { targetDays: 4 } } });
   assert.equal(p.expectedDays.A, 1);
   assert.equal(p.expectedDays.B, 4);
-  assert.equal(p.expectedDays.C, 9);
+  assert.equal(p.expectedDays.C, 7); // 残り9日分だが、7日間の期間なので7日まで
   const r = c2.evaluate(p, [as('2026-11-30', 'L', 'A'), as('2026-12-01', 'L', 'A')]);
-  // A: (2-1)^2=1, B: (0-4)^2=16, C: (0-9)^2=81
-  assert.equal(r.penalty[5], 98);
+  // A: (2-1)^2=1, B: (0-4)^2=16, C: (0-7)^2=49
+  assert.equal(r.penalty[5], 66);
   assert.equal(r.summary.find((s) => s.staffId === 'A').days, 2);
   assert.equal(r.summary.find((s) => s.staffId === 'A').expectedDays, 1);
 });
@@ -235,4 +235,14 @@ test('comparePenalty は先頭優先', () => {
   assert.equal(c2.comparePenalty([0, 0, 1, 0, 0, 0, 0], [0, 0, 0, 99, 99, 99, 0]), 1);
   assert.equal(c2.comparePenalty([0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0]), 0);
   assert.equal(c2.comparePenalty([0, 1, 0, 0, 0, 0, 0], [0, 2, 0, 0, 0, 0, 0]), -1);
+});
+
+test('evaluate: 目安なしのスタッフの期待日数は期間日数と週の上限を超えない', () => {
+  const p = fixture({ staffOverrides: { A: { targetDays: 1 }, C: { maxDays: 2 } } });
+  // 必要延べ14 − A の1 = 13 を B と C で分ける → 6.5 だが、C は週2日まで
+  assert.equal(p.expectedDays.B, 6.5);
+  assert.equal(p.expectedDays.C, 2);
+  const big = fixture({ settings: { slots: [
+    { id: 'L', name: 'ランチ', start: '10:00', end: '15:00', weekdays: ALL_WEEK, required: { '': 9 } }] } });
+  assert.equal(big.expectedDays.A, 7); // 7日間の期間なので最大7日
 });

@@ -464,3 +464,42 @@ ui('印刷用CSSでボタンが隠れる', async () => {
     assert.equal(await s.page.isVisible('#grid'), true);
   } finally { await s.close(); }
 });
+
+// ==================== 最終レビューでの修正 ====================
+
+ui('在籍を外した人の固定割り当ては表に出ず、不足になる', async () => {
+  const ids = {};
+  const s = await openShiftPage({ seed: (call, mock) => {
+    seedGrid(ids, { names: ['A', 'B'] })(call, mock);
+    call('saveShiftPeriod', 'seed', DAY, DAY, [{ date: DAY, slotId: 'L', position: '', staffId: ids.A, kind: 'assign', pinned: true }], []);
+    call('setStaffActive', 'seed', ids.A, false);
+  } });
+  try {
+    await openGrid(s);
+    assert.deepEqual(await whoIds(s), []);
+    assert.ok((await s.page.textContent(cellSel)).includes('不足'));
+  } finally { await s.close(); }
+});
+
+ui('日別枠を変えて自動作成しても、手直しはシートに保存されない', async () => {
+  const ids = {};
+  const s = await openShiftPage({ seed: (call) => {
+    call('saveShiftSettings', 'seed', Object.assign({}, SIMPLE_SETTINGS, { slots: [
+      { id: 'L', name: 'ランチ', start: '10:00', end: '15:00', weekdays: ALL_WEEK, required: { '': 1 } },
+      { id: 'D', name: 'ディナー', start: '17:00', end: '22:00', weekdays: ALL_WEEK, required: { '': 1 } }] }));
+    ['A', 'B'].forEach((n) => { ids[n] = call('saveStaffMember', 'seed', staffIn(n)).staff.id; });
+  } });
+  try {
+    await openGrid(s);
+    await s.page.click(cellSel);
+    await s.page.click('#picker .addCand[data-staff="' + ids.A + '"]');
+    await s.page.click('th.dayHead[data-date="' + DAY + '"]');
+    await s.page.uncheck('#dayPanel input.daySlot[value="D"]');
+    await generate(s);
+    assert.deepEqual(await whoIds(s), [ids.A]);
+    assert.equal(await s.page.locator('.cellPos[data-slot="D"]').count(), 0);
+    const saved = s.call('getShiftBootstrap', 'seed', DAY, DAY);
+    assert.deepEqual(saved.assignments, []);
+    assert.deepEqual(saved.dayOverrides, []);
+  } finally { await s.close(); }
+});

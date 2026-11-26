@@ -151,8 +151,16 @@ function shiftCoreFactory() {
         targetedSum += expectedDays[st.id];
       }
     });
+    // 目安なしの人は残りを等分する。ただし期間の日数と週の上限日数を超えない
     const share = untargeted.length ? Math.max(0, totalDemand - targetedSum) / untargeted.length : 0;
-    untargeted.forEach(function (id) { expectedDays[id] = share; });
+    untargeted.forEach(function (id) {
+      const st = staffById[id];
+      let cap = dates.length;
+      if (st.maxDays !== null && st.maxDays !== undefined && st.maxDays !== '') {
+        cap = Math.min(cap, Number(st.maxDays) * dates.length / 7);
+      }
+      expectedDays[id] = Math.min(share, cap);
+    });
 
     return {
       from: input.from, to: input.to, settings: settings, dates: dates,
@@ -475,8 +483,26 @@ function shiftCoreFactory() {
       }
     });
 
-    function place(seat, st) { seat.staff = st; track(st.id, seat.cell.date, seat.cell, 1); }
-    function unplace(seat) { const st = seat.staff; track(st.id, seat.cell.date, seat.cell, -1); seat.staff = null; return st; }
+    // 貪欲法の簡易採点用: 期間内の出勤日・枠ごとのベテラン人数
+    const daysIn = {};    // staffId -> {date: count}
+    const vetCount = {};  // date|slotId -> count
+    function tally(staffId, date, slotId, sign) {
+      const d = daysIn[staffId] = daysIn[staffId] || {};
+      d[date] = (d[date] || 0) + sign;
+      if (d[date] <= 0) delete d[date];
+      const st = problem.staffById[staffId];
+      if (st && st.veteran) vetCount[date + '|' + slotId] = (vetCount[date + '|' + slotId] || 0) + sign;
+    }
+    pinnedAssigns.forEach(function (a) { tally(a.staffId, a.date, a.slotId, 1); });
+
+    function place(seat, st) { seat.staff = st; track(st.id, seat.cell.date, seat.cell, 1); tally(st.id, seat.cell.date, seat.cell.slotId, 1); }
+    function unplace(seat) {
+      const st = seat.staff;
+      track(st.id, seat.cell.date, seat.cell, -1);
+      tally(st.id, seat.cell.date, seat.cell.slotId, -1);
+      seat.staff = null;
+      return st;
+    }
     function inSameCell(seat, st) {
       for (let i = 0; i < seats.length; i++) {
         if (seats[i] !== seat && seats[i].cell === seat.cell && seats[i].staff === st) return true;
@@ -497,18 +523,44 @@ function shiftCoreFactory() {
     }
     function score() { return evaluate(problem, currentAssignments()).penalty; }
 
-    // --- 1. 貪欲法: 候補の少ない席から、罰点が一番小さくなる人を入れる ---
+    /**
+     * 貪欲法で「この人をこの席に入れたら罰点がどれだけ増えるか」を、関係する項目だけで素早く見積もる
+     * (全体の evaluate は重く、大きな店だと貪欲法だけで時間制限を超えるため)。
+     * 順番は evaluate の罰点と同じ [hard, shortage, avoid, preferOff, veteran, fairness, -want]。
+     */
+    const minVet = parseInt(problem.settings.minVeteranPerSlot, 10) || 0;
+    const partners = {};
+    (problem.settings.pairRules || []).forEach(function (r) {
+      if (r.type !== 'avoid') return;
+      (partners[r.a] = partners[r.a] || []).push(r.b);
+      (partners[r.b] = partners[r.b] || []).push(r.a);
+    });
+    function greedyCost(st, cell) {
+      let avoid = 0;
+      (partners[st.id] || []).forEach(function (pid) {
+        (busy[pid + '|' + cell.date] || []).forEach(function (r) { if (rangesOverlap(r, cell)) avoid = 1; });
+      });
+      const av = availability(problem, st.id, cell.date, cell.slotId);
+      const vet = (minVet > 0 && st.veteran && (vetCount[cell.date + '|' + cell.slotId] || 0) < minVet) ? -1 : 0;
+      const days = Object.keys(daysIn[st.id] || {}).length;
+      const expected = problem.expectedDays[st.id] || 0;
+      const newDay = !(daysIn[st.id] && daysIn[st.id][cell.date]);
+      const fair = newDay ? (days + 1 - expected) * (days + 1 - expected) - (days - expected) * (days - expected) : 0;
+      // 週の上限日数がある人は、出勤日を散らすと週の後半に人が足りなくなりやすいので、
+      // できれば同じ日の別の枠にまとめる(公平さより優先。罰点の配列に1項目足した貪欲法専用の採点)
+      const scarce = (newDay && st.maxDays) ? 1 : 0;
+      return [0, 0, avoid, av === 'prefer_off' ? 1 : 0, scarce, vet, fair, av === 'want' ? -1 : 0];
+    }
+
+    // --- 1. 貪欲法: 候補の少ない席から、罰点の増え方が一番小さい人を入れる ---
     const order = seats.slice().sort(function (x, y) {
       return (x.cands.length - y.cands.length) || (y.cell.required - x.cell.required) || (x.cellIdx - y.cellIdx);
     });
     order.forEach(function (seat) {
-      const cands = feasibleCands(seat);
-      let best = null, bestPenalty = null;
-      cands.forEach(function (st) {
-        place(seat, st);
-        const pen = score();
-        unplace(seat);
-        if (!best || comparePenalty(pen, bestPenalty) < 0) { best = st; bestPenalty = pen; }
+      let best = null, bestCost = null;
+      feasibleCands(seat).forEach(function (st) {
+        const cost = greedyCost(st, seat.cell);
+        if (!best || comparePenalty(cost, bestCost) < 0) { best = st; bestCost = cost; }
       });
       if (best) place(seat, best);
     });
@@ -523,7 +575,22 @@ function shiftCoreFactory() {
       let undo = null;
       if (!seatA.staff) {
         const cands = feasibleCands(seatA);
-        if (cands.length) { place(seatA, pick(cands)); undo = function () { unplace(seatA); }; }
+        if (cands.length) {
+          place(seatA, pick(cands));
+          undo = function () { unplace(seatA); };
+        } else {
+          // 入れられる人がいない空席: 別の席の人をここへ移す(移した先の席はあとで別の人が埋められるかもしれない)
+          const from = pick(seats);
+          if (from !== seatA && from.staff && from.cell !== seatA.cell) {
+            const mover = unplace(from);
+            if (seatA.cands.indexOf(mover) !== -1 && feasible(mover, seatA.cell) && !inSameCell(seatA, mover)) {
+              place(seatA, mover);
+              undo = function () { unplace(seatA); place(from, mover); };
+            } else {
+              place(from, mover);
+            }
+          }
+        }
       } else if (r < 0.5) {
         const old = unplace(seatA);
         const cands = feasibleCands(seatA).filter(function (st) { return st !== old; });

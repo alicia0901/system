@@ -810,7 +810,9 @@
           if ((STATE.data.business[date] || {}).closed) { html += '<td class="closedCell"></td>'; return; }
           if (!cells) { html += '<td></td>'; return; }
           html += '<td data-date="' + date + '" data-slot="' + esc(slot.id) + '">' + cells.map(function (cell) {
-            var people = STATE.assignments.filter(function (a) { return a.kind === 'assign' && sameCell(a, date, slot.id, cell.position); });
+            var people = STATE.assignments.filter(function (a) {
+              return a.kind === 'assign' && sameCell(a, date, slot.id, cell.position) && problem.staffById[a.staffId];
+            });
             var mark = cellMark[date + '|' + slot.id] || '';
             var short = cell.required - people.length;
             return '<div class="cellPos ' + mark + '" data-date="' + date + '" data-slot="' + esc(slot.id) + '" data-pos="' + esc(cell.position) + '">' +
@@ -890,7 +892,9 @@
       if (!PICK) { el('pickerWrap').innerHTML = ''; return; }
       var problem = gridProblem();
       var p = PICK;
-      var inCell = STATE.assignments.filter(function (a) { return a.kind === 'assign' && sameCell(a, p.date, p.slotId, p.position); });
+      var inCell = STATE.assignments.filter(function (a) {
+        return a.kind === 'assign' && sameCell(a, p.date, p.slotId, p.position) && problem.staffById[a.staffId];
+      });
       var inIds = inCell.map(function (a) { return a.staffId; });
       var html = '<div id="picker"><b>' + dayLabel(p.date) + ' ' + esc(slotName(p.slotId)) + (p.position ? ' ' + esc(p.position) : '') + '</b>';
       html += '<div class="cand">' + (inCell.length ? inCell.map(function (a) {
@@ -986,15 +990,8 @@
       setGridBusy(true);
       showMsg('gridMsg', '作成中…(最大30秒ほど)', false);
       var current = resetPins ? [] : STATE.assignments;
-      // サーバは保存済みの日別枠で枠を作るので、日別枠を変えていたら先に保存する
-      var before = STATE.overridesDirty
-        ? callServer('saveShiftPeriod', TOKEN, STATE.from, STATE.to, STATE.assignments, STATE.dayOverrides)
-        : Promise.resolve({ success: true });
-      before.then(function (saved) {
-        if (!saved.success) return saved;
-        STATE.overridesDirty = false;
-        return callServer('generateShift', TOKEN, STATE.from, STATE.to, current);
-      }).then(function (res) {
+      // 画面上の日別枠(未保存を含む)を渡して作る。ここでは何も保存しない
+      callServer('generateShift', TOKEN, STATE.from, STATE.to, current, STATE.dayOverrides).then(function (res) {
         setGridBusy(false);
         if (!res.success) { showMsg('gridMsg', res.message, true); return; }
         STATE.assignments = res.assignments;

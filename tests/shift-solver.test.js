@@ -154,3 +154,21 @@ test('性能: 30人・31日・1日3枠が時間内に終わる', { timeout: 4000
   assert.equal(r.penalty[1], 0);
   assert.equal(r.penalty[2], 0);
 });
+
+test('時間制限は貪欲法の途中でも守る(大きめの店)', { timeout: 60000 }, () => {
+  const staff = [];
+  for (let i = 0; i < 30; i++) staff.push({ id: 'S' + i, positions: i % 3 === 0 ? ['キッチン', 'ホール'] : ['ホール'], maxDays: 5 });
+  const req = { 'ホール': 4, 'キッチン': 3 };
+  const p = problem({
+    from: '2026-12-01', to: '2026-12-31', staff,
+    settings: { positions: ['ホール', 'キッチン'], slots: [slot('L', '10:00', '15:00', req), slot('D', '17:00', '22:00', req), slot('N', '22:00', '01:00', req)] },
+  });
+  const t0 = Date.now();
+  const out = c.solve(p, [], { seed: 1, timeLimitMs: 3000 });
+  const elapsed = Date.now() - t0;
+  assert.ok(elapsed < 6000, 'elapsed ' + elapsed);
+  const r = c.evaluate(p, out);
+  assert.equal(r.penalty[0], 0);
+  // 時間切れでも、入れられる人がいる席は空けない(キッチンは10人×週5日で足りる)
+  assert.equal(r.penalty[1], 0);
+});
