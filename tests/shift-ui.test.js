@@ -307,3 +307,160 @@ ui('未保存のまま別タブへ移ると確認が出て、破棄される', a
     assert.ok(!(await s.page.textContent('.reqDay[data-date="2026-11-05"]')).includes('休'));
   } finally { await s.close(); }
 });
+
+// ==================== Task 8: シフト表 ====================
+
+const DAY = '2026-12-01'; // 火曜(営業日)
+function seedGrid(ids, o) {
+  o = o || {};
+  return (call) => {
+    call('saveShiftSettings', 'seed', Object.assign({}, SIMPLE_SETTINGS, {
+      slots: [{ id: 'L', name: 'ランチ', start: '10:00', end: '15:00', weekdays: ALL_WEEK, required: { '': o.required || 1 } }],
+    }));
+    (o.names || ['A', 'B', 'C']).forEach((n) => { ids[n] = call('saveStaffMember', 'seed', staffIn(n)).staff.id; });
+    if (o.pair) {
+      const st = call('getShiftBootstrap', 'seed', DAY, DAY).settings;
+      call('saveShiftSettings', 'seed', Object.assign(st, { pairRules: [{ a: ids.A, b: ids.B, type: 'avoid' }] }));
+    }
+    (o.requests || []).forEach((r) => {
+      call('saveRequests', 'seed', DAY, DAY, [Object.assign({ date: DAY, slotId: '', note: '' }, r, { staffId: ids[r.staff] })]);
+    });
+  };
+}
+async function openGrid(s) {
+  await s.login();
+  await openPeriod(s, DAY, DAY);
+}
+async function generate(s) {
+  await s.page.click('#genBtn');
+  await waitMsg(s, 'gridMsg', '作成しました');
+}
+const cellSel = '.cellPos[data-date="' + DAY + '"][data-slot="L"]';
+const whoIds = (s) => s.page.$$eval(cellSel + ' .who', (els) => els.map((e) => e.dataset.staff).sort());
+
+ui('自動作成 → 表に名前が並び、不足がなければ警告なし', async () => {
+  const ids = {};
+  const s = await openShiftPage({ seed: seedGrid(ids) });
+  try {
+    await openGrid(s);
+    assert.ok((await s.page.textContent(cellSel)).includes('不足'));
+    await generate(s);
+    assert.equal((await whoIds(s)).length, 1);
+    assert.equal(await s.page.locator('#warnList .warnItem').count(), 0);
+    assert.equal(await s.page.locator('#summary tr.staffRow').count(), 3);
+    assert.deepEqual(s.errors(), []);
+  } finally { await s.close(); }
+});
+
+ui('avoid の2人しかいない枠は一緒に入って警告が出る', async () => {
+  const ids = {};
+  const s = await openShiftPage({ seed: seedGrid(ids, { names: ['A', 'B'], required: 2, pair: true }) });
+  try {
+    await openGrid(s);
+    await generate(s);
+    assert.deepEqual(await whoIds(s), [ids.A, ids.B].sort());
+    assert.ok((await s.page.textContent('#warnList')).includes('12/1 ランチ: AさんとBさんが同じ時間(できれば避けたい組み合わせ)'));
+  } finally { await s.close(); }
+});
+
+ui('手で入れた人は固定になり、再作成でも残る', async () => {
+  const ids = {};
+  const s = await openShiftPage({ seed: seedGrid(ids) });
+  try {
+    await openGrid(s);
+    await s.page.click(cellSel);
+    await s.page.click('#picker .addCand[data-staff="' + ids.C + '"]');
+    assert.equal(await s.page.locator(cellSel + ' .who.pinned[data-staff="' + ids.C + '"]').count(), 1);
+    await generate(s);
+    assert.deepEqual(await whoIds(s), [ids.C]);
+  } finally { await s.close(); }
+});
+
+ui('外した人は再作成で戻らない', async () => {
+  const ids = {};
+  const s = await openShiftPage({ seed: seedGrid(ids, { names: ['A', 'B'] }) });
+  try {
+    await openGrid(s);
+    await generate(s);
+    const [first] = await whoIds(s);
+    await s.page.click(cellSel);
+    await s.page.click('#picker .removeWho[data-staff="' + first + '"]');
+    await generate(s);
+    const now = await whoIds(s);
+    assert.equal(now.length, 1);
+    assert.notEqual(now[0], first);
+  } finally { await s.close(); }
+});
+
+ui('出られない人も理由付きで選べ、選ぶと赤い警告', async () => {
+  const ids = {};
+  const s = await openShiftPage({ seed: seedGrid(ids, { requests: [{ staff: 'A', kind: 'unavailable' }] }) });
+  try {
+    await openGrid(s);
+    await s.page.click(cellSel);
+    const cand = s.page.locator('#picker .addCand[data-staff="' + ids.A + '"]');
+    assert.ok((await cand.getAttribute('class')).includes('blocked'));
+    assert.ok((await cand.textContent()).includes('出られない日'));
+    await cand.click();
+    assert.ok((await s.page.textContent('#warnList .warnItem.error')).includes('Aさんは出られない日'));
+    assert.equal(await s.page.locator(cellSel + '.err').count(), 1);
+  } finally { await s.close(); }
+});
+
+ui('時間が重なる別の枠に入っている人は選べない', async () => {
+  const ids = {};
+  const s = await openShiftPage({ seed: (call) => {
+    call('saveShiftSettings', 'seed', Object.assign({}, SIMPLE_SETTINGS, { slots: [
+      { id: 'L', name: 'ランチ', start: '10:00', end: '15:00', weekdays: ALL_WEEK, required: { '': 1 } },
+      { id: 'T', name: '通し', start: '10:00', end: '22:00', weekdays: ALL_WEEK, required: { '': 1 } }] }));
+    ids.A = call('saveStaffMember', 'seed', staffIn('A')).staff.id;
+  } });
+  try {
+    await openGrid(s);
+    await s.page.click(cellSel);
+    await s.page.click('#picker .addCand[data-staff="' + ids.A + '"]');
+    await s.page.click('.cellPos[data-date="' + DAY + '"][data-slot="T"]');
+    assert.equal(await s.page.locator('#picker .addCand[data-staff="' + ids.A + '"]').isDisabled(), true);
+  } finally { await s.close(); }
+});
+
+ui('日別枠を消すとその日の枠が表から消え、保存される', async () => {
+  const ids = {};
+  const s = await openShiftPage({ seed: seedGrid(ids) });
+  try {
+    await openGrid(s);
+    await s.page.click('th.dayHead[data-date="' + DAY + '"]');
+    await s.page.uncheck('#dayPanel input.daySlot[value="L"]');
+    assert.equal(await s.page.locator(cellSel).count(), 0);
+    await s.page.click('#gridSaveBtn');
+    await waitMsg(s, 'gridMsg', '保存しました');
+    assert.deepEqual(s.call('getShiftBootstrap', 'seed', DAY, DAY).dayOverrides, [{ date: DAY, slotId: 'L', state: 'off' }]);
+  } finally { await s.close(); }
+});
+
+ui('保存 → 再読み込みで同じ表', async () => {
+  const ids = {};
+  const s = await openShiftPage({ seed: seedGrid(ids, { required: 2 }) });
+  try {
+    await openGrid(s);
+    await generate(s);
+    const before = await whoIds(s);
+    await s.page.click('#gridSaveBtn');
+    await waitMsg(s, 'gridMsg', '保存しました');
+    await s.page.click('#periodLoadBtn');
+    await s.page.waitForFunction(() => document.getElementById('periodMsg').textContent === '');
+    assert.deepEqual(await whoIds(s), before);
+  } finally { await s.close(); }
+});
+
+ui('印刷用CSSでボタンが隠れる', async () => {
+  const ids = {};
+  const s = await openShiftPage({ seed: seedGrid(ids) });
+  try {
+    await openGrid(s);
+    await s.page.emulateMedia({ media: 'print' });
+    assert.equal(await s.page.isVisible('#genBtn'), false);
+    assert.equal(await s.page.isVisible('.tabs'), false);
+    assert.equal(await s.page.isVisible('#grid'), true);
+  } finally { await s.close(); }
+});

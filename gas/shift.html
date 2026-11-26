@@ -139,7 +139,7 @@
      * 画面の状態。data は getShiftBootstrap の結果。
      * assignments / dayOverrides / requests は画面上で編集中の内容(保存前)。
      */
-    var STATE = { from: '', to: '', data: null, assignments: [], dayOverrides: [], requests: [], gridDirty: false, reqDirty: false };
+    var STATE = { from: '', to: '', data: null, assignments: [], dayOverrides: [], requests: [], gridDirty: false, reqDirty: false, overridesDirty: false };
     // タブごとの描画関数(各タブの処理が登録する)
     var RENDER = {};
 
@@ -237,6 +237,7 @@
         STATE.requests = res.requests.slice();
         STATE.gridDirty = false;
         STATE.reqDirty = false;
+        STATE.overridesDirty = false;
         renderCurrentTab();
         return res;
       });
@@ -257,6 +258,7 @@
             STATE.assignments = STATE.data.assignments.slice();
             STATE.dayOverrides = STATE.data.dayOverrides.slice();
             STATE.gridDirty = false;
+            STATE.overridesDirty = false;
           }
         }
       }
@@ -687,6 +689,328 @@
         el('reqSaveBtn').disabled = false;
         if (!res.success) { showMsg('reqMsg', res.message, true); return; }
         reload().then(function () { showMsg('reqMsg', '保存しました。', false); });
+      });
+    }
+  </script>
+  <style>
+    /* ---- シフト表 ---- */
+    .gridButtons { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+    #gridWrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; }
+    #grid { border-collapse: separate; border-spacing: 0; min-width: 100%; font-size: 13px; }
+    #grid th, #grid td { border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 6px; vertical-align: top; }
+    #grid th.slotHead { position: sticky; left: 0; background: #fff; z-index: 1; text-align: left; white-space: nowrap; min-width: 6.5em; }
+    #grid th.slotHead small { display: block; color: var(--muted); font-weight: normal; }
+    #grid thead th { background: var(--bg); white-space: nowrap; }
+    #grid th.dayHead { cursor: pointer; min-width: 7.5em; }
+    #grid th.dayHead.sat { color: var(--edit); }
+    #grid th.dayHead.sun { color: var(--danger); }
+    #grid th.closedHead, #grid td.closedCell { background: #f2f2f2; color: #999; }
+    .cellPos { cursor: pointer; border-radius: 6px; padding: 3px 4px; margin-bottom: 3px; min-height: 1.6em; }
+    .cellPos:hover { background: var(--bg); }
+    .cellPos .pos { font-size: 11px; color: var(--muted); }
+    .cellPos.warn { background: var(--warn-bg); }
+    .cellPos.err { background: var(--danger-bg); }
+    .who { display: inline-block; margin: 1px 3px 1px 0; padding: 1px 6px; border-radius: 999px; background: var(--edit-bg); color: var(--edit); }
+    .who.pinned::after { content: ' ●'; font-size: 9px; vertical-align: 1px; }
+    .who.warn { background: var(--warn-bg); color: var(--warn); }
+    .who.err { background: var(--danger-bg); color: var(--danger); font-weight: bold; }
+    .short { display: inline-block; padding: 1px 6px; border-radius: 999px; border: 1px dashed var(--danger); color: var(--danger); font-size: 12px; }
+    #picker, #dayPanel { border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin: 12px 0; background: #fffdfb; }
+    #picker .cand { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+    #picker .addCand { background: var(--edit-bg); color: var(--edit); font-weight: normal; }
+    #picker .addCand.blocked { background: #eee; color: #888; }
+    #picker .addCand .reason { font-size: 11px; margin-left: 4px; }
+    #warnList { margin-top: 14px; }
+    .warnItem { font-size: 13px; padding: 4px 8px; border-left: 4px solid var(--warn); background: var(--warn-bg); margin-bottom: 4px; border-radius: 4px; }
+    .warnItem.error { border-left-color: var(--danger); background: var(--danger-bg); color: var(--danger); }
+    #summary { margin-top: 14px; border-collapse: collapse; font-size: 13px; }
+    #summary th, #summary td { border-bottom: 1px solid var(--border); padding: 4px 8px; text-align: right; white-space: nowrap; }
+    #summary th:first-child, #summary td:first-child { text-align: left; }
+    #summary tr.offTarget td { background: var(--warn-bg); }
+    #summary tr.overMax td { background: var(--danger-bg); color: var(--danger); }
+    .legend { font-size: 12px; color: var(--muted); margin: 6px 0 0; }
+
+    @media print {
+      body { background: #fff; padding: 0; font-size: 11px; }
+      .card { box-shadow: none; padding: 0; max-width: none; }
+      .topBar button, .topBar a, .periodRow, .tabs, .gridButtons, #picker, #dayPanel, #warnList, #gridMsg, .legend, #tab-grid > .note { display: none !important; }
+      #gridWrap { overflow: visible; border: none; }
+      #grid th, #grid td { border-color: #000; }
+      #grid th.slotHead { position: static; }
+      .who, .short, .cellPos.warn, .cellPos.err { background: none !important; color: #000 !important; border: none; padding: 0 2px; }
+      .who.pinned::after { content: ''; }
+    }
+  </style>
+  <script>
+    // ==================== シフト表 タブ ====================
+    var PICK = null; // 開いているセル { date, slotId, position }
+
+    function gridProblem() {
+      var d = STATE.data;
+      return Core.buildProblem({
+        from: STATE.from, to: STATE.to, settings: d.settings, staff: d.staff, requests: d.requests,
+        recurring: d.recurring, business: d.business, dayOverrides: STATE.dayOverrides,
+        outsideAssignments: d.outsideAssignments,
+      });
+    }
+    function sameCell(a, date, slotId, position) { return a.date === date && a.slotId === slotId && (a.position || '') === position; }
+
+    RENDER.grid = function () {
+      var html = '<p class="note">「自動作成」で案を作り、セルをタップして手直しします。手で入れた・外した人は固定(●)になり、もう一度自動作成しても変わりません。日付をタップすると、その日だけ枠を消したり足したりできます。</p>';
+      html += '<div class="gridButtons"><button id="genBtn" class="primary">自動作成</button>' +
+        '<button id="genResetBtn">固定も消して作り直す</button><button id="gridSaveBtn" class="primary">保存</button>' +
+        '<button id="printBtn">印刷</button></div><div id="gridMsg" class="msg"></div>';
+      html += '<div id="dayPanelWrap"></div><div id="pickerWrap"></div>';
+      html += '<div id="gridWrap"><table id="grid"></table></div><p class="legend">● 固定 / 赤: 守るべき条件を破っている / 黄: できれば避けたい</p>';
+      html += '<div id="warnList"></div><table id="summary"></table>';
+      el('tab-grid').innerHTML = html;
+      if (!STATE.data.settings.slots.length) {
+        el('grid').innerHTML = '<tr><td>先に「枠と条件」タブでシフト枠を作ってください。</td></tr>';
+      }
+      el('genBtn').addEventListener('click', function () { runGenerate(false); });
+      el('genResetBtn').addEventListener('click', function () {
+        if (confirm('固定した割り当ても含めて、すべて作り直します。よろしいですか?')) runGenerate(true);
+      });
+      el('gridSaveBtn').addEventListener('click', saveGrid);
+      el('printBtn').addEventListener('click', function () { window.print(); });
+      PICK = null;
+      renderGridBody();
+    };
+
+    function renderGridBody() {
+      if (!STATE.data.settings.slots.length) return;
+      var problem = gridProblem();
+      var result = Core.evaluate(problem, STATE.assignments);
+      var dates = problem.dates;
+
+      // 警告の印(セル・人)
+      var cellMark = {}, whoMark = {};
+      result.warnings.forEach(function (w) {
+        if (!w.date || !w.slotId) return;
+        var key = w.date + '|' + w.slotId;
+        if (cellMark[key] !== 'err') cellMark[key] = w.level === 'error' ? 'err' : 'warn';
+        w.staffIds.forEach(function (id) {
+          var k = key + '|' + id;
+          if (whoMark[k] !== 'err') whoMark[k] = w.level === 'error' ? 'err' : 'warn';
+        });
+      });
+      var cellsByDateSlot = {};
+      problem.cells.forEach(function (c) { (cellsByDateSlot[c.date + '|' + c.slotId] = cellsByDateSlot[c.date + '|' + c.slotId] || []).push(c); });
+
+      var html = '<thead><tr><th class="slotHead">枠</th>' + dates.map(function (date) {
+        var b = STATE.data.business[date] || {};
+        var wd = Core.weekdayOf(date);
+        if (b.closed) return '<th class="closedHead">' + dayLabel(date) + '<br>休業</th>';
+        return '<th class="dayHead' + (wd === 6 ? ' sat' : wd === 0 ? ' sun' : '') + '" data-date="' + date + '">' + dayLabel(date) + '</th>';
+      }).join('') + '</tr></thead><tbody>';
+      STATE.data.settings.slots.forEach(function (slot) {
+        html += '<tr><th class="slotHead">' + esc(slot.name) + '<small>' + esc(slot.start) + '-' + esc(slot.end) + '</small></th>';
+        dates.forEach(function (date) {
+          var cells = cellsByDateSlot[date + '|' + slot.id];
+          if ((STATE.data.business[date] || {}).closed) { html += '<td class="closedCell"></td>'; return; }
+          if (!cells) { html += '<td></td>'; return; }
+          html += '<td data-date="' + date + '" data-slot="' + esc(slot.id) + '">' + cells.map(function (cell) {
+            var people = STATE.assignments.filter(function (a) { return a.kind === 'assign' && sameCell(a, date, slot.id, cell.position); });
+            var mark = cellMark[date + '|' + slot.id] || '';
+            var short = cell.required - people.length;
+            return '<div class="cellPos ' + mark + '" data-date="' + date + '" data-slot="' + esc(slot.id) + '" data-pos="' + esc(cell.position) + '">' +
+              (cell.position ? '<span class="pos">' + esc(cell.position) + '</span> ' : '') +
+              people.map(function (a) {
+                var m = whoMark[date + '|' + slot.id + '|' + a.staffId] || '';
+                return '<span class="who ' + m + (a.pinned ? ' pinned' : '') + '" data-staff="' + esc(a.staffId) + '">' + esc(staffName(a.staffId)) + '</span>';
+              }).join('') +
+              (short > 0 ? '<span class="short">不足' + (short > 1 ? short : '') + '</span>' : '') + '</div>';
+          }).join('') + '</td>';
+        });
+        html += '</tr>';
+      });
+      el('grid').innerHTML = html + '</tbody>';
+
+      document.querySelectorAll('#grid .cellPos').forEach(function (c) {
+        c.addEventListener('click', function () {
+          PICK = { date: c.dataset.date, slotId: c.dataset.slot, position: c.dataset.pos };
+          renderPicker();
+        });
+      });
+      document.querySelectorAll('#grid th.dayHead').forEach(function (th) {
+        th.addEventListener('click', function () { renderDayPanel(th.dataset.date); });
+      });
+
+      el('warnList').innerHTML = result.warnings.length
+        ? '<h2>警告(' + result.warnings.length + '件)</h2>' + result.warnings.map(function (w) {
+          return '<div class="warnItem ' + (w.level === 'error' ? 'error' : 'warn') + '">' + esc(w.message) + '</div>';
+        }).join('')
+        : '';
+      el('summary').innerHTML = '<thead><tr><th>スタッフ</th><th>出勤日数</th><th>目安</th><th>時間</th><th>上限(週)</th></tr></thead><tbody>' +
+        result.summary.map(function (sm) {
+          var st = STATE.data.staff.filter(function (s) { return s.id === sm.staffId; })[0];
+          var cls = (sm.overMaxDays || sm.overMaxHours) ? 'overMax' : (Math.abs(sm.days - sm.expectedDays) > 1 ? 'offTarget' : '');
+          var limits = [];
+          if (st.maxDays !== null) limits.push(st.maxDays + '日');
+          if (st.maxHours !== null) limits.push(st.maxHours + '時間');
+          return '<tr class="staffRow ' + cls + '"><td>' + esc(sm.name) + '</td><td>' + sm.days + '日</td><td>' + sm.expectedDays + '日</td><td>' +
+            sm.hours + '時間</td><td>' + (limits.join(' / ') || '-') + '</td></tr>';
+        }).join('') + '</tbody>';
+      if (PICK) renderPicker();
+    }
+
+    /** 候補者ごとの「入れたらどうなるか」 */
+    function candidateInfo(problem, st, date, slotId, position) {
+      var cell = problem.cellByKey[date + '|' + slotId + '|' + position];
+      var reasons = [], blocked = false, disabled = false;
+      var others = STATE.assignments.filter(function (a) {
+        return a.kind === 'assign' && a.staffId === st.id && a.date === date && !sameCell(a, date, slotId, position);
+      });
+      if (cell && others.some(function (a) {
+        var c = problem.cellByKey[Core.cellKeyOf(a)];
+        return c && Core.rangesOverlap(c, cell);
+      })) { reasons.push('同じ時間に別の枠'); disabled = true; }
+      if (position && st.positions.indexOf(position) === -1) { reasons.push(position + 'の担当外'); blocked = true; }
+      var av = Core.availability(problem, st.id, date, slotId);
+      if (av === 'unavailable') { reasons.push('出られない日'); blocked = true; }
+      if (av === 'prefer_off') reasons.push('休み希望');
+      if (av === 'want') reasons.push('出たい');
+      if (!disabled) {
+        var trial = STATE.assignments.concat([{ date: date, slotId: slotId, position: position, staffId: st.id, kind: 'assign', pinned: true }]);
+        var over = Core.evaluate(problem, trial).warnings.some(function (w) {
+          return (w.code === 'max_days' || w.code === 'max_hours') && w.staffIds[0] === st.id;
+        });
+        var before = Core.evaluate(problem, STATE.assignments).warnings.some(function (w) {
+          return (w.code === 'max_days' || w.code === 'max_hours') && w.staffIds[0] === st.id;
+        });
+        if (over && !before) { reasons.push('週の上限を超える'); blocked = true; }
+      }
+      if (STATE.assignments.some(function (a) { return a.kind === 'exclude' && a.staffId === st.id && a.date === date && a.slotId === slotId; })) {
+        reasons.push('外した人');
+      }
+      return { reasons: reasons, blocked: blocked, disabled: disabled };
+    }
+
+    function renderPicker() {
+      if (!PICK) { el('pickerWrap').innerHTML = ''; return; }
+      var problem = gridProblem();
+      var p = PICK;
+      var inCell = STATE.assignments.filter(function (a) { return a.kind === 'assign' && sameCell(a, p.date, p.slotId, p.position); });
+      var inIds = inCell.map(function (a) { return a.staffId; });
+      var html = '<div id="picker"><b>' + dayLabel(p.date) + ' ' + esc(slotName(p.slotId)) + (p.position ? ' ' + esc(p.position) : '') + '</b>';
+      html += '<div class="cand">' + (inCell.length ? inCell.map(function (a) {
+        return '<span class="who' + (a.pinned ? ' pinned' : '') + '">' + esc(staffName(a.staffId)) + '</span>' +
+          '<button class="small removeWho" data-staff="' + esc(a.staffId) + '">外す</button>' +
+          (a.pinned ? '<button class="small unpinWho" data-staff="' + esc(a.staffId) + '">固定を外す</button>' : '');
+      }).join('') : '<span class="note">まだ誰も入っていません。</span>') + '</div>';
+      html += '<div style="margin-top:8px;font-size:13px;">追加する人:</div><div class="cand">' +
+        STATE.data.staff.filter(function (s) { return s.active && inIds.indexOf(s.id) === -1; }).map(function (st) {
+          var info = candidateInfo(problem, st, p.date, p.slotId, p.position);
+          return '<button class="addCand' + (info.blocked || info.disabled ? ' blocked' : '') + '" data-staff="' + esc(st.id) + '"' +
+            (info.disabled ? ' disabled' : '') + '>' + esc(st.name) +
+            (info.reasons.length ? '<span class="reason">(' + esc(info.reasons.join('・')) + ')</span>' : '') + '</button>';
+        }).join('') + '</div>';
+      html += '<div class="buttons"><button id="pickerClose" class="small">閉じる</button></div></div>';
+      el('pickerWrap').innerHTML = html;
+      document.querySelectorAll('#picker .addCand').forEach(function (b) {
+        b.addEventListener('click', function () { pickAdd(b.dataset.staff); });
+      });
+      document.querySelectorAll('#picker .removeWho').forEach(function (b) {
+        b.addEventListener('click', function () { pickRemove(b.dataset.staff); });
+      });
+      document.querySelectorAll('#picker .unpinWho').forEach(function (b) {
+        b.addEventListener('click', function () { pickUnpin(b.dataset.staff); });
+      });
+      el('pickerClose').addEventListener('click', function () { PICK = null; renderPicker(); });
+    }
+
+    function gridChanged() { STATE.gridDirty = true; renderGridBody(); }
+
+    function pickAdd(staffId) {
+      var p = PICK;
+      STATE.assignments = STATE.assignments.filter(function (a) {
+        return !(a.kind === 'exclude' && a.staffId === staffId && a.date === p.date && a.slotId === p.slotId);
+      });
+      STATE.assignments.push({ date: p.date, slotId: p.slotId, position: p.position, staffId: staffId, kind: 'assign', pinned: true });
+      gridChanged();
+    }
+
+    function pickRemove(staffId) {
+      var p = PICK;
+      STATE.assignments = STATE.assignments.filter(function (a) {
+        return !(a.staffId === staffId && a.date === p.date && a.slotId === p.slotId &&
+          (a.kind === 'exclude' || (a.position || '') === p.position));
+      });
+      STATE.assignments.push({ date: p.date, slotId: p.slotId, position: '', staffId: staffId, kind: 'exclude', pinned: true });
+      gridChanged();
+    }
+
+    function pickUnpin(staffId) {
+      var p = PICK;
+      STATE.assignments.forEach(function (a) {
+        if (a.kind === 'assign' && a.staffId === staffId && sameCell(a, p.date, p.slotId, p.position)) a.pinned = false;
+      });
+      gridChanged();
+    }
+
+    /** 日付見出しのパネル: その日だけ枠を消す・足す */
+    function renderDayPanel(date) {
+      var slots = STATE.data.settings.slots;
+      var withOverrides = {}, base = {};
+      Core.buildCells(STATE.data.settings, [date], STATE.data.business, STATE.dayOverrides)
+        .forEach(function (c) { withOverrides[c.slotId] = true; });
+      Core.buildCells(STATE.data.settings, [date], STATE.data.business, [])
+        .forEach(function (c) { base[c.slotId] = true; });
+      var html = '<div id="dayPanel"><b>' + dayLabel(date) + ' の枠</b><div class="checks" style="margin-top:6px;">' +
+        slots.map(function (sl) {
+          return '<label><input type="checkbox" class="daySlot" value="' + esc(sl.id) + '"' + (withOverrides[sl.id] ? ' checked' : '') + '>' +
+            esc(sl.name) + (base[sl.id] ? '' : '(普段はなし)') + '</label>';
+        }).join('') + '</div><div class="buttons"><button id="dayPanelClose" class="small">閉じる</button></div></div>';
+      el('dayPanelWrap').innerHTML = html;
+      document.querySelectorAll('#dayPanel input.daySlot').forEach(function (cb) {
+        cb.addEventListener('change', function () {
+          var slotId = cb.value;
+          STATE.dayOverrides = STATE.dayOverrides.filter(function (o) { return !(o.date === date && o.slotId === slotId); });
+          if (cb.checked !== !!base[slotId]) STATE.dayOverrides.push({ date: date, slotId: slotId, state: cb.checked ? 'on' : 'off' });
+          if (!cb.checked) {
+            STATE.assignments = STATE.assignments.filter(function (a) { return !(a.date === date && a.slotId === slotId); });
+          }
+          STATE.overridesDirty = true;
+          if (PICK && PICK.date === date && PICK.slotId === slotId) PICK = null;
+          gridChanged();
+        });
+      });
+      el('dayPanelClose').addEventListener('click', function () { el('dayPanelWrap').innerHTML = ''; });
+    }
+
+    function setGridBusy(busy) {
+      ['genBtn', 'genResetBtn', 'gridSaveBtn'].forEach(function (id) { el(id).disabled = busy; });
+    }
+
+    function runGenerate(resetPins) {
+      setGridBusy(true);
+      showMsg('gridMsg', '作成中…(最大30秒ほど)', false);
+      var current = resetPins ? [] : STATE.assignments;
+      // サーバは保存済みの日別枠で枠を作るので、日別枠を変えていたら先に保存する
+      var before = STATE.overridesDirty
+        ? callServer('saveShiftPeriod', TOKEN, STATE.from, STATE.to, STATE.assignments, STATE.dayOverrides)
+        : Promise.resolve({ success: true });
+      before.then(function (saved) {
+        if (!saved.success) return saved;
+        STATE.overridesDirty = false;
+        return callServer('generateShift', TOKEN, STATE.from, STATE.to, current);
+      }).then(function (res) {
+        setGridBusy(false);
+        if (!res.success) { showMsg('gridMsg', res.message, true); return; }
+        STATE.assignments = res.assignments;
+        PICK = null;
+        gridChanged();
+        showMsg('gridMsg', '作成しました。内容を確認して「保存」を押してください。', false);
+      });
+    }
+
+    function saveGrid() {
+      setGridBusy(true);
+      callServer('saveShiftPeriod', TOKEN, STATE.from, STATE.to, STATE.assignments, STATE.dayOverrides).then(function (res) {
+        setGridBusy(false);
+        if (!res.success) { showMsg('gridMsg', res.message, true); return; }
+        STATE.overridesDirty = false;
+        reload().then(function () { showMsg('gridMsg', '保存しました。', false); });
       });
     }
   </script>
