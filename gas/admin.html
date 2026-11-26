@@ -226,7 +226,7 @@
     }
 
     .settingsRow { text-align: right; margin: -6px 0 14px; }
-    .settingsRow button {
+    .settingsRow button, .settingsRow a {
       display: inline-flex;
       align-items: center;
       gap: 4px;
@@ -544,6 +544,7 @@
     </div>
 
     <div class="settingsRow">
+      <a id="shiftLink" target="_top" href="<?= shiftUrl ?>"><span class="icon" data-icon="gear" data-icon-size="14"></span>シフト表</a>
       <button id="weekBtn" type="button"><span class="icon" data-icon="gear" data-icon-size="14"></span>週間ビュー</button>
       <button id="statsBtn" type="button"><span class="icon" data-icon="gear" data-icon-size="14"></span>集計を見る</button>
       <button id="hoursBtn" type="button"><span class="icon" data-icon="gear" data-icon-size="14"></span>営業時間・休業日</button>

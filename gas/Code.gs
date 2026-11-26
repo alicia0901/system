@@ -133,9 +133,24 @@ function doGet(e) {
 
   if (page === 'admin') {
     const title = (CONFIG.STORE_NAME ? CONFIG.STORE_NAME + ' ' : '') + '予約管理';
-    return HtmlService.createTemplateFromFile('admin')
+    const adminTemplate = HtmlService.createTemplateFromFile('admin');
+    adminTemplate.shiftUrl = ScriptApp.getService().getUrl() + '?page=shift';
+    return adminTemplate
       .evaluate()
       .setTitle(title)
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  }
+
+  if (page === 'shift') {
+    // シフト表(Shift.gs / ShiftCore.gs / shift.html)。共通ロジックは画面にも埋め込む
+    const shiftTemplate = HtmlService.createTemplateFromFile('shift');
+    shiftTemplate.storeName = CONFIG.STORE_NAME;
+    shiftTemplate.adminUrl = ScriptApp.getService().getUrl() + '?page=admin';
+    shiftTemplate.shiftCoreSource = shiftCoreFactory.toString();
+    return shiftTemplate
+      .evaluate()
+      .setTitle((CONFIG.STORE_NAME ? CONFIG.STORE_NAME + ' ' : '') + 'シフト表')
       .addMetaTag('viewport', 'width=device-width, initial-scale=1')
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   }

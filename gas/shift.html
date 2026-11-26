@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <style>
+    :root {
+      --main: #b5502f;
+      --main-dark: #7c3a22;
+      --bg: #faf6f2;
+      --border: #e3d9d0;
+      --text: #2b2b2b;
+      --muted: #777;
+      --danger: #c0392b;
+      --danger-bg: #fbebe9;
+      --warn: #9a6a00;
+      --warn-bg: #fff6dc;
+      --ok: #2f7a5f;
+      --edit: #2f6f9c;
+      --edit-bg: #eaf3f9;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 24px 16px 60px;
+      font-size: 15px;
+    }
+    .card {
+      max-width: 1100px;
+      margin: 0 auto;
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      padding: 24px 20px;
+    }
+    #loginView.card { max-width: 420px; }
+    h1 { font-size: 20px; text-align: center; color: var(--main-dark); margin: 0 0 20px; }
+    h2 { font-size: 16px; color: var(--main-dark); margin: 22px 0 10px; }
+    h2:first-child { margin-top: 0; }
+    p.note { font-size: 13px; color: var(--muted); margin: 0 0 12px; }
+    label { display: block; font-size: 13px; font-weight: bold; margin: 12px 0 6px; }
+    input[type="password"], input[type="text"], input[type="number"], input[type="date"], input[type="time"], select, textarea {
+      padding: 9px 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 15px;
+      background: #fff;
+      color: var(--text);
+      font-family: inherit;
+    }
+    input[type="password"] { width: 100%; font-size: 16px; padding: 12px; }
+    button {
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: bold;
+      font-family: inherit;
+      font-size: 14px;
+      padding: 10px 16px;
+      background: #eee;
+      color: #555;
+    }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+    button.primary { background: var(--main); color: #fff; }
+    button.small { padding: 6px 10px; font-size: 12px; font-weight: normal; }
+    button.link { background: none; color: var(--edit); text-decoration: underline; padding: 4px; font-weight: normal; }
+    button.danger { background: var(--danger-bg); color: var(--danger); }
+    #loginBtn { width: 100%; margin-top: 20px; padding: 14px; font-size: 16px; }
+    .msg { margin-top: 10px; font-size: 13px; min-height: 1em; }
+    .msg.error { color: var(--danger); }
+    .msg.ok { color: var(--ok); }
+
+    .topBar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+    .topBar h1 { margin: 0; text-align: left; flex: 1; }
+    .topBar a { color: #888; font-size: 12px; }
+    .tabs { display: flex; gap: 6px; flex-wrap: wrap; border-bottom: 2px solid var(--border); margin-bottom: 16px; }
+    .tabs button {
+      background: none; color: var(--muted); border-radius: 8px 8px 0 0; padding: 10px 14px;
+      border-bottom: 3px solid transparent; margin-bottom: -2px;
+    }
+    .tabs button.active { color: var(--main-dark); border-bottom-color: var(--main); }
+    .periodRow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+    .periodRow label { margin: 0; }
+    .tabPanel { display: none; }
+    .tabPanel.active { display: block; }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .checks { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+    .checks label { display: inline-flex; align-items: center; gap: 2px; margin: 0; font-weight: normal; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="card" id="loginView">
+    <h1><?= storeName ?> シフト表ログイン</h1>
+    <label for="password">管理パスワード</label>
+    <input type="password" id="password" placeholder="管理画面と同じパスワード">
+    <button id="loginBtn" class="primary">ログイン</button>
+    <div id="loginMsg" class="msg error"></div>
+  </div>
+
+  <div class="card" id="appView" style="display:none;">
+    <div class="topBar">
+      <h1><?= storeName ?> シフト表</h1>
+      <a id="backToAdmin" href="<?= adminUrl ?>" target="_top">予約管理に戻る</a>
+      <button id="logoutBtn" class="small">ログアウト</button>
+    </div>
+
+    <div class="periodRow">
+      <label for="periodFrom">期間</label>
+      <input type="date" id="periodFrom">
+      <span>〜</span>
+      <input type="date" id="periodTo">
+      <button id="periodLoadBtn">表示</button>
+      <span id="periodMsg" class="msg error"></span>
+    </div>
+
+    <div class="tabs">
+      <button data-tab="grid" class="active">シフト表</button>
+      <button data-tab="staff">スタッフ</button>
+      <button data-tab="requests">希望・休み</button>
+      <button data-tab="settings">枠と条件</button>
+    </div>
+
+    <div class="tabPanel active" id="tab-grid"></div>
+    <div class="tabPanel" id="tab-staff"></div>
+    <div class="tabPanel" id="tab-requests"></div>
+    <div class="tabPanel" id="tab-settings"></div>
+  </div>
+
+  <script>var Core = (<?!= shiftCoreSource ?>)();</script>
+  <script>
+    var TOKEN = null;
+    var CURRENT_TAB = 'grid';
+    var WEEKDAY_LABELS = ['日', '月', '火', '水', '木', '金', '土'];
+    var KIND_LABELS = { unavailable: '出られない', prefer_off: 'できれば休み', want: '出たい' };
+    /**
+     * 画面の状態。data は getShiftBootstrap の結果。
+     * assignments / dayOverrides / requests は画面上で編集中の内容(保存前)。
+     */
+    var STATE = { from: '', to: '', data: null, assignments: [], dayOverrides: [], requests: [], gridDirty: false, reqDirty: false };
+    // タブごとの描画関数(各タブの処理が登録する)
+    var RENDER = {};
+
+    function storageGet(key) { try { return sessionStorage.getItem(key); } catch (e) { return null; } }
+    function storageSet(key, v) { try { if (v === null) sessionStorage.removeItem(key); else sessionStorage.setItem(key, v); } catch (e) {} }
+
+    function esc(s) {
+      return String(s === null || s === undefined ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+    function el(id) { return document.getElementById(id); }
+    function pad(n) { return n < 10 ? '0' + n : '' + n; }
+    function toDateStr(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+    function dayLabel(date) { return Core.formatMD(date) + '(' + WEEKDAY_LABELS[Core.weekdayOf(date)] + ')'; }
+    function staffName(id) {
+      var st = (STATE.data && STATE.data.staff || []).filter(function (s) { return s.id === id; })[0];
+      return st ? st.name : '(不明)';
+    }
+    function slotName(id) {
+      var sl = (STATE.data && STATE.data.settings.slots || []).filter(function (s) { return s.id === id; })[0];
+      return sl ? sl.name : '';
+    }
+
+    function showMsg(id, text, isError) {
+      var box = el(id);
+      if (!box) return;
+      box.textContent = text || '';
+      box.className = 'msg ' + (isError ? 'error' : 'ok');
+    }
+
+    /**
+     * サーバ関数を呼ぶ。ログイン切れ(authError)ならログイン画面に戻す。
+     * 通信エラーは { success: false, message } として返す。
+     */
+    function callServer(name) {
+      var args = Array.prototype.slice.call(arguments, 1);
+      return new Promise(function (resolve) {
+        google.script.run
+          .withSuccessHandler(function (res) {
+            if (res && res.authError) {
+              TOKEN = null;
+              storageSet('adminToken', null);
+              showLogin(res.message);
+            }
+            resolve(res || { success: false, message: '応答がありませんでした。' });
+          })
+          .withFailureHandler(function (err) {
+            resolve({ success: false, message: '通信エラー: ' + (err && err.message ? err.message : err) });
+          })[name].apply(null, args);
+      });
+    }
+
+    function showLogin(message) {
+      el('appView').style.display = 'none';
+      el('loginView').style.display = 'block';
+      showMsg('loginMsg', message || '', true);
+    }
+
+    function showApp() {
+      el('loginView').style.display = 'none';
+      el('appView').style.display = 'block';
+    }
+
+    function doLogin() {
+      var btn = el('loginBtn');
+      btn.disabled = true;
+      showMsg('loginMsg', '', true);
+      callServer('adminLogin', el('password').value).then(function (res) {
+        btn.disabled = false;
+        if (!res.success) { showMsg('loginMsg', res.message, true); return; }
+        TOKEN = res.token;
+        storageSet('adminToken', TOKEN);
+        showApp();
+        reload();
+      });
+    }
+
+    function hasUnsaved() { return STATE.gridDirty || STATE.reqDirty; }
+    function confirmDiscard() {
+      return !hasUnsaved() || confirm('保存していない変更があります。破棄しますか?');
+    }
+
+    /** 期間のデータを読み直して、今のタブを描き直す */
+    function reload() {
+      var from = el('periodFrom').value, to = el('periodTo').value;
+      showMsg('periodMsg', '読み込み中…', false);
+      return callServer('getShiftBootstrap', TOKEN, from, to).then(function (res) {
+        if (!res.success) { if (!res.authError) showMsg('periodMsg', res.message, true); return res; }
+        showMsg('periodMsg', '', false);
+        STATE.from = from;
+        STATE.to = to;
+        STATE.data = res;
+        STATE.assignments = res.assignments.slice();
+        STATE.dayOverrides = res.dayOverrides.slice();
+        STATE.requests = res.requests.slice();
+        STATE.gridDirty = false;
+        STATE.reqDirty = false;
+        renderCurrentTab();
+        return res;
+      });
+    }
+
+    function renderCurrentTab() {
+      if (STATE.data && RENDER[CURRENT_TAB]) RENDER[CURRENT_TAB]();
+    }
+
+    function showTab(name) {
+      CURRENT_TAB = name;
+      document.querySelectorAll('[data-tab]').forEach(function (b) { b.classList.toggle('active', b.dataset.tab === name); });
+      document.querySelectorAll('.tabPanel').forEach(function (p) { p.classList.toggle('active', p.id === 'tab-' + name); });
+      renderCurrentTab();
+    }
+
+    /** 期間の初期値: 来月の1日〜末日 */
+    function setDefaultPeriod() {
+      var now = new Date();
+      el('periodFrom').value = toDateStr(new Date(now.getFullYear(), now.getMonth() + 1, 1));
+      el('periodTo').value = toDateStr(new Date(now.getFullYear(), now.getMonth() + 2, 0));
+    }
+
+    function init() {
+      setDefaultPeriod();
+      el('loginBtn').addEventListener('click', doLogin);
+      el('password').addEventListener('keydown', function (e) { if (e.key === 'Enter') doLogin(); });
+      el('logoutBtn').addEventListener('click', function () {
+        TOKEN = null;
+        storageSet('adminToken', null);
+        showLogin('');
+      });
+      el('periodLoadBtn').addEventListener('click', function () { if (confirmDiscard()) reload(); });
+      document.querySelectorAll('[data-tab]').forEach(function (b) {
+        b.addEventListener('click', function () { showTab(b.dataset.tab); });
+      });
+
+      TOKEN = storageGet('adminToken');
+      if (TOKEN) {
+        showApp();
+        reload();
+      }
+    }
+  </script>
+  <!-- ==== タブごとの処理(以下に追記) ==== -->
+  <script>document.addEventListener('DOMContentLoaded', init);</script>
+</body>
+</html>

@@ -105,7 +105,7 @@ if (!configBlockPattern.test(engineCode)) {
 const newCode = engineCode.replace(configBlockPattern, configBlock);
 
 fs.writeFileSync(path.join(outDir, 'Code.gs'), newCode);
-['index.html', 'admin.html', 'appsscript.json', '.claspignore'].forEach((f) => {
+['index.html', 'admin.html', 'shift.html', 'Shift.gs', 'ShiftCore.gs', 'appsscript.json', '.claspignore'].forEach((f) => {
   fs.copyFileSync(path.join(engineDir, f), path.join(outDir, f));
 });
 
