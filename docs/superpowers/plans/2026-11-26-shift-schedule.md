@@ -51,7 +51,7 @@
 | Create `tests/shift-core.test.js`, `tests/shift-solver.test.js`, `tests/shift-server.test.js`, `tests/shift-ui.test.js` | テスト |
 | Modify `README.md`, `CLAUDE.md` | 説明追記 |
 
-テスト実行コマンド(全タスク共通): `node --test tests/`
+テスト実行コマンド(全タスク共通): `node --test 'tests/*.test.js'`
 
 ## 共通データ形(全タスクで使う)
 
@@ -151,7 +151,7 @@ test('buildCells: 日別枠 off/on', () => {
 
 - [ ] **Step 2: 失敗を確認**
 
-Run: `node --test tests/`
+Run: `node --test 'tests/*.test.js'`
 Expected: FAIL(`shiftCoreFactory is not defined` / ファイルなし)
 
 - [ ] **Step 3: `gas/ShiftCore.gs` に `function shiftCoreFactory()` を実装**
@@ -161,7 +161,7 @@ Expected: FAIL(`shiftCoreFactory is not defined` / ファイルなし)
 
 - [ ] **Step 4: 成功を確認**
 
-Run: `node --test tests/`
+Run: `node --test 'tests/*.test.js'`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
@@ -261,9 +261,9 @@ test('comparePenalty は先頭優先', () => {
 
 (`as(date, slotId, staffId)` は `{date, slotId, position:'', staffId, kind:'assign', pinned:false}` を返すテスト内ヘルパー。中身を書き下していないテストは、コメントの条件で assert を書く。)
 
-- [ ] **Step 2: 失敗を確認** — Run: `node --test tests/` / Expected: FAIL(`buildProblem is not a function`)
+- [ ] **Step 2: 失敗を確認** — Run: `node --test 'tests/*.test.js'` / Expected: FAIL(`buildProblem is not a function`)
 - [ ] **Step 3: `buildProblem` / `availability` / `evaluate` / `comparePenalty` を実装**
-- [ ] **Step 4: 成功を確認** — Run: `node --test tests/` / Expected: PASS
+- [ ] **Step 4: 成功を確認** — Run: `node --test 'tests/*.test.js'` / Expected: PASS
 - [ ] **Step 5: Commit** — `git commit -am "シフト: 希望の解決と条件評価(警告・罰点・集計)"`
 
 ---
@@ -318,9 +318,9 @@ test('性能: 30人・31日・1日3枠が時間内に終わる', { timeout: 4000
 });
 ```
 
-- [ ] **Step 2: 失敗を確認** — Run: `node --test tests/` / Expected: FAIL(`solve is not a function`)
+- [ ] **Step 2: 失敗を確認** — Run: `node --test 'tests/*.test.js'` / Expected: FAIL(`solve is not a function`)
 - [ ] **Step 3: `solve` を実装**
-- [ ] **Step 4: 成功を確認** — Run: `node --test tests/` / Expected: PASS(性能テストに約20秒かかる)
+- [ ] **Step 4: 成功を確認** — Run: `node --test 'tests/*.test.js'` / Expected: PASS(性能テストに約20秒かかる)
 - [ ] **Step 5: Commit** — `git commit -am "シフト: 自動作成(貪欲法 + 局所探索)"`
 
 ---
@@ -392,9 +392,9 @@ test('outsideAssignments は端の週の期間外だけ', () => { /* 11/30〜12/
 test('generateShift は保存しない', () => { /* 呼ぶ前後で シフト_割り当て の行数が同じ、assignments が返る */ });
 ```
 
-- [ ] **Step 2: 失敗を確認** — Run: `node --test tests/` / Expected: FAIL(`getShiftBootstrap is not defined`)
+- [ ] **Step 2: 失敗を確認** — Run: `node --test 'tests/*.test.js'` / Expected: FAIL(`getShiftBootstrap is not defined`)
 - [ ] **Step 3: 検証関数を `ShiftCore.gs` に、API・シート入出力を `Shift.gs` に実装**。`Shift.gs` の先頭で `const ShiftCore = …` のようなトップレベル実行はせず、各関数の中で `shiftCoreFactory()` を呼ぶ(GAS はファイルの読み込み順が保証されないため)
-- [ ] **Step 4: 成功を確認** — Run: `node --test tests/` / Expected: PASS
+- [ ] **Step 4: 成功を確認** — Run: `node --test 'tests/*.test.js'` / Expected: PASS
 - [ ] **Step 5: Commit** — `git add gas/ tests/ && git commit -m "シフト: サーバAPIとシートへの保存"`
 
 ---
@@ -441,9 +441,9 @@ test('doGet(page=shift) はシフト画面を返す', () => { /* モックの Ht
 
 (`doGet` のテストのため、`gas-mock.js` に `HtmlService.createTemplateFromFile(name)` を足す。テンプレートに設定されたプロパティと `name` を記録し、`evaluate().setTitle().addMetaTag().setXFrameOptionsMode()` を連鎖できるようにする。)
 
-- [ ] **Step 2: 失敗を確認** — Run: `node --test tests/` / Expected: FAIL
+- [ ] **Step 2: 失敗を確認** — Run: `node --test 'tests/*.test.js'` / Expected: FAIL
 - [ ] **Step 3: 実装**
-- [ ] **Step 4: 成功を確認** — Run: `node --test tests/` / Expected: PASS。あわせて `node -e "require('fs').readFileSync('gas/Code.gs','utf8').match(/const CONFIG = \{[\s\S]*?\n\};/) || process.exit(1)"` が終了コード0(CONFIG ブロックが崩れていない)
+- [ ] **Step 4: 成功を確認** — Run: `node --test 'tests/*.test.js'` / Expected: PASS。あわせて `node -e "require('fs').readFileSync('gas/Code.gs','utf8').match(/const CONFIG = \{[\s\S]*?\n\};/) || process.exit(1)"` が終了コード0(CONFIG ブロックが崩れていない)
 - [ ] **Step 5: Commit** — `git commit -am "シフト: ページの入口・ログイン・配布設定"`(新規ファイルは `git add` してから)
 
 ---
@@ -479,9 +479,9 @@ test('枠と「一緒にしない」を保存', async () => { /* 保存後 boots
 test('検証エラーがそのまま表示される', async () => { /* 枠名空で保存 → #settingsMsg が '1件目の枠名を入力してください。' */ });
 ```
 
-- [ ] **Step 2: 失敗を確認** — Run: `node --test tests/` / Expected: FAIL
+- [ ] **Step 2: 失敗を確認** — Run: `node --test 'tests/*.test.js'` / Expected: FAIL
 - [ ] **Step 3: 実装**
-- [ ] **Step 4: 成功を確認** — Run: `node --test tests/` / Expected: PASS
+- [ ] **Step 4: 成功を確認** — Run: `node --test 'tests/*.test.js'` / Expected: PASS
 - [ ] **Step 5: Commit** — `git commit -am "シフト: スタッフと枠・条件の設定画面"`
 
 ---
@@ -512,9 +512,9 @@ test('定期条件は薄く表示され、その日の希望で上書きでき�
 test('他のスタッフの希望も消えずに保存される', async () => { /* 2人分入力 → 両方残る */ });
 ```
 
-- [ ] **Step 2: 失敗を確認** — Run: `node --test tests/` / Expected: FAIL
+- [ ] **Step 2: 失敗を確認** — Run: `node --test 'tests/*.test.js'` / Expected: FAIL
 - [ ] **Step 3: 実装**
-- [ ] **Step 4: 成功を確認** — Run: `node --test tests/` / Expected: PASS
+- [ ] **Step 4: 成功を確認** — Run: `node --test 'tests/*.test.js'` / Expected: PASS
 - [ ] **Step 5: Commit** — `git commit -am "シフト: 希望・休みの入力画面"`
 
 ---
@@ -562,9 +562,9 @@ test('印刷用CSSでボタンが隠れる', async () => {
 });
 ```
 
-- [ ] **Step 2: 失敗を確認** — Run: `node --test tests/` / Expected: FAIL
+- [ ] **Step 2: 失敗を確認** — Run: `node --test 'tests/*.test.js'` / Expected: FAIL
 - [ ] **Step 3: 実装**
-- [ ] **Step 4: 成功を確認** — Run: `node --test tests/` / Expected: PASS
+- [ ] **Step 4: 成功を確認** — Run: `node --test 'tests/*.test.js'` / Expected: PASS
 - [ ] **Step 5: スマホ幅の見た目を確認** — `tests/helpers/shift-page.js` で 390×844 と 1280×800 のスクリーンショットを撮り(`deviceScaleFactor: 1`)、横スクロール以外にページ全体がはみ出していないこと、枠名の列が固定されていることを目で確認する
 - [ ] **Step 6: Commit** — `git commit -am "シフト: シフト表(自動作成・手直し・警告・印刷)"`
 
@@ -573,9 +573,9 @@ test('印刷用CSSでボタンが隠れる', async () => {
 ### Task 9: ドキュメント
 
 **Files:**
-- Modify: `README.md`(機能一覧に1行、ファイル構成に3ファイルと `tests/`、「シフト表の使い方」節: 初回の設定順(枠と条件 → スタッフ → 希望 → 自動作成)、条件の強さと優先順位、テストの実行方法 `node --test tests/`)
+- Modify: `README.md`(機能一覧に1行、ファイル構成に3ファイルと `tests/`、「シフト表の使い方」節: 初回の設定順(枠と条件 → スタッフ → 希望 → 自動作成)、条件の強さと優先順位、テストの実行方法 `node --test 'tests/*.test.js'`)
 - Modify: `CLAUDE.md`(「コマンド」にテスト実行、「アーキテクチャ」に「シフト表」節: `ShiftCore.gs` は `shiftCoreFactory` 1つで GAS API・外部変数を使わない(画面へ `toString()` で埋め込むため)、保存先(プロパティ `SHIFT_SETTINGS` と5シート)、固定・除外の意味、週の上限に期間外の割り当てを含めること、`create-store.js` と `.claspignore` に新ファイルを足す必要があること)
 
 - [ ] **Step 1: 追記する**
-- [ ] **Step 2: 確認** — Run: `node --test tests/` / Expected: PASS(ドキュメントの変更で何も壊れていない)。README のファイル構成と実際の `ls gas tests` が一致する
+- [ ] **Step 2: 確認** — Run: `node --test 'tests/*.test.js'` / Expected: PASS(ドキュメントの変更で何も壊れていない)。README のファイル構成と実際の `ls gas tests` が一致する
 - [ ] **Step 3: Commit** — `git commit -am "シフト: README と CLAUDE.md に説明を追加"`
