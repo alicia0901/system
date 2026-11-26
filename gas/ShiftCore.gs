@@ -384,6 +384,185 @@ function shiftCoreFactory() {
     return 0;
   }
 
+  // ==================== 自動作成 ====================
+
+  /** 再現できる小さな擬似乱数(mulberry32) */
+  function makeRng(seed) {
+    let t = (seed >>> 0) || 1;
+    return function () {
+      t = (t + 0x6D2B79F5) >>> 0;
+      let x = Math.imul(t ^ (t >>> 15), 1 | t);
+      x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x;
+      return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  /**
+   * シフト案を自動で作る。
+   * - current のうち pinned のもの(割り当て・除外)はそのまま残し、pinned でないものは捨てる
+   * - 自分で作る割り当ては絶対条件(出られない・担当外・同じ人の時間重複・週の上限・除外)を破らない
+   * @param {Object} problem buildProblem の結果
+   * @param {Array} current 画面上の今の割り当て
+   * @param {{timeLimitMs?: number, seed?: number, now?: function(): number}} [options]
+   * @return {Array} 割り当て一覧
+   */
+  function solve(problem, current, options) {
+    options = options || {};
+    const now = options.now || Date.now;
+    const startedAt = now();
+    const timeLimitMs = options.timeLimitMs === undefined ? 20000 : options.timeLimitMs;
+    const rng = makeRng(options.seed === undefined ? startedAt : options.seed);
+    const STALL_LIMIT = 5000; // これだけ続けて改善しなければ打ち切る
+
+    const pinned = (current || []).filter(function (a) { return a.pinned; });
+    const excluded = {};
+    pinned.forEach(function (a) { if (a.kind === 'exclude') excluded[a.date + '|' + a.slotId + '|' + a.staffId] = true; });
+    const pinnedAssigns = validAssigns(problem, pinned);
+
+    // --- 絶対条件の判定に使う索引 ---
+    const busy = {};   // staffId|date -> [{startMin, endMin}]
+    const weeks = {};  // staffId|monday -> { dates: {date: count}, hours }
+    function rangeOfAssign(a) {
+      const cell = problem.cellByKey[cellKeyOf(a)];
+      return cell ? { startMin: cell.startMin, endMin: cell.endMin } : slotRange(problem.slotById[a.slotId]);
+    }
+    function track(staffId, date, range, sign) {
+      const bk = staffId + '|' + date;
+      if (sign > 0) {
+        (busy[bk] = busy[bk] || []).push(range);
+      } else {
+        const list = busy[bk];
+        for (let i = 0; i < list.length; i++) {
+          if (list[i].startMin === range.startMin && list[i].endMin === range.endMin) { list.splice(i, 1); break; }
+        }
+      }
+      const wk = staffId + '|' + mondayOf(date);
+      const w = weeks[wk] = weeks[wk] || { dates: {}, hours: 0 };
+      w.dates[date] = (w.dates[date] || 0) + sign;
+      if (w.dates[date] <= 0) delete w.dates[date];
+      w.hours += sign * (range.endMin - range.startMin) / 60;
+    }
+    pinnedAssigns.forEach(function (a) { track(a.staffId, a.date, rangeOfAssign(a), 1); });
+    problem.outsideAssignments.forEach(function (a) {
+      if (a.kind === 'exclude' || !problem.staffById[a.staffId] || !problem.slotById[a.slotId]) return;
+      track(a.staffId, a.date, slotRange(problem.slotById[a.slotId]), 1);
+    });
+
+    function staticOk(st, cell) {
+      if (cell.position && (st.positions || []).indexOf(cell.position) === -1) return false;
+      if (excluded[cell.date + '|' + cell.slotId + '|' + st.id]) return false;
+      return availability(problem, st.id, cell.date, cell.slotId) !== 'unavailable';
+    }
+    function feasible(st, cell) {
+      const list = busy[st.id + '|' + cell.date] || [];
+      for (let i = 0; i < list.length; i++) if (rangesOverlap(list[i], cell)) return false;
+      const w = weeks[st.id + '|' + mondayOf(cell.date)];
+      const days = w ? Object.keys(w.dates).length + (w.dates[cell.date] ? 0 : 1) : 1;
+      if (st.maxDays && days > Number(st.maxDays)) return false;
+      const hours = (w ? w.hours : 0) + (cell.endMin - cell.startMin) / 60;
+      if (st.maxHours && hours > Number(st.maxHours) + 1e-9) return false;
+      return true;
+    }
+
+    // --- 埋める席 ---
+    const pinnedCount = {};
+    pinnedAssigns.forEach(function (a) { const k = cellKeyOf(a); pinnedCount[k] = (pinnedCount[k] || 0) + 1; });
+    const seats = [];
+    problem.cells.forEach(function (cell, idx) {
+      const cands = problem.activeStaff.filter(function (st) { return staticOk(st, cell); });
+      for (let n = cell.required - (pinnedCount[cell.key] || 0); n > 0; n--) {
+        seats.push({ cell: cell, cellIdx: idx, cands: cands, staff: null });
+      }
+    });
+
+    function place(seat, st) { seat.staff = st; track(st.id, seat.cell.date, seat.cell, 1); }
+    function unplace(seat) { const st = seat.staff; track(st.id, seat.cell.date, seat.cell, -1); seat.staff = null; return st; }
+    function inSameCell(seat, st) {
+      for (let i = 0; i < seats.length; i++) {
+        if (seats[i] !== seat && seats[i].cell === seat.cell && seats[i].staff === st) return true;
+      }
+      return false;
+    }
+    function feasibleCands(seat) {
+      return seat.cands.filter(function (st) { return feasible(st, seat.cell) && !inSameCell(seat, st); });
+    }
+    function currentAssignments() {
+      const out = pinned.slice();
+      seats.forEach(function (seat) {
+        if (!seat.staff) return;
+        out.push({ date: seat.cell.date, slotId: seat.cell.slotId, position: seat.cell.position,
+          staffId: seat.staff.id, kind: 'assign', pinned: false });
+      });
+      return out;
+    }
+    function score() { return evaluate(problem, currentAssignments()).penalty; }
+
+    // --- 1. 貪欲法: 候補の少ない席から、罰点が一番小さくなる人を入れる ---
+    const order = seats.slice().sort(function (x, y) {
+      return (x.cands.length - y.cands.length) || (y.cell.required - x.cell.required) || (x.cellIdx - y.cellIdx);
+    });
+    order.forEach(function (seat) {
+      const cands = feasibleCands(seat);
+      let best = null, bestPenalty = null;
+      cands.forEach(function (st) {
+        place(seat, st);
+        const pen = score();
+        unplace(seat);
+        if (!best || comparePenalty(pen, bestPenalty) < 0) { best = st; bestPenalty = pen; }
+      });
+      if (best) place(seat, best);
+    });
+
+    // --- 2. 局所探索: 入れ替え・交換・空席埋めを試し、悪くならなければ採用 ---
+    let cur = score();
+    let stall = 0;
+    function pick(list) { return list[Math.floor(rng() * list.length)]; }
+    while (seats.length && now() - startedAt < timeLimitMs && stall < STALL_LIMIT) {
+      const r = rng();
+      const seatA = pick(seats);
+      let undo = null;
+      if (!seatA.staff) {
+        const cands = feasibleCands(seatA);
+        if (cands.length) { place(seatA, pick(cands)); undo = function () { unplace(seatA); }; }
+      } else if (r < 0.5) {
+        const old = unplace(seatA);
+        const cands = feasibleCands(seatA).filter(function (st) { return st !== old; });
+        if (cands.length) {
+          place(seatA, pick(cands));
+          undo = function () { unplace(seatA); place(seatA, old); };
+        } else {
+          place(seatA, old);
+        }
+      } else {
+        const seatB = pick(seats);
+        if (seatB !== seatA && seatB.staff && seatB.staff !== seatA.staff && seatB.cell !== seatA.cell) {
+          const a = unplace(seatA), b = unplace(seatB);
+          let ok = seatA.cands.indexOf(b) !== -1 && seatB.cands.indexOf(a) !== -1 &&
+            feasible(b, seatA.cell) && !inSameCell(seatA, b);
+          if (ok) { place(seatA, b); ok = feasible(a, seatB.cell) && !inSameCell(seatB, a); if (!ok) unplace(seatA); }
+          if (ok) {
+            place(seatB, a);
+            undo = function () { unplace(seatA); unplace(seatB); place(seatA, a); place(seatB, b); };
+          } else {
+            place(seatA, a); place(seatB, b);
+          }
+        }
+      }
+      if (!undo) { stall++; continue; }
+      const next = score();
+      const cmp = comparePenalty(next, cur);
+      if (cmp <= 0) {
+        stall = cmp < 0 ? 0 : stall + 1;
+        cur = next;
+      } else {
+        undo();
+        stall++;
+      }
+    }
+
+    return currentAssignments();
+  }
+
   return {
     pad2: pad2,
     hhmmToMin: hhmmToMin,
@@ -401,5 +580,6 @@ function shiftCoreFactory() {
     rangesOverlap: rangesOverlap,
     evaluate: evaluate,
     comparePenalty: comparePenalty,
+    solve: solve,
   };
 }
