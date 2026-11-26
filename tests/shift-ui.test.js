@@ -97,3 +97,114 @@ test('Code.gs の CONFIG ブロックが create-store.js の正規表現で見�
   const code = fs.readFileSync(path.join(__dirname, '..', 'gas', 'Code.gs'), 'utf8');
   assert.ok(/const CONFIG = \{[\s\S]*?\n\};/.test(code));
 });
+
+// ==================== Task 6: スタッフと枠・条件 ====================
+
+const ALL_WEEK = [0, 1, 2, 3, 4, 5, 6];
+const SIMPLE_SETTINGS = {
+  positions: [], pairRules: [], minVeteranPerSlot: 0,
+  slots: [{ id: 'L', name: 'ランチ', start: '10:00', end: '15:00', weekdays: ALL_WEEK, required: { '': 1 } }],
+};
+const staffIn = (name, extra) => Object.assign(
+  { id: '', name, positions: [], veteran: false, targetDays: null, maxDays: null, maxHours: null, active: true, note: '' }, extra || {});
+const boot = (s) => s.call('getShiftBootstrap', 'seed', '2026-12-01', '2026-12-31');
+const waitMsg = (s, id, text) => s.page.waitForFunction(
+  ([i, t]) => document.getElementById(i) && document.getElementById(i).textContent.indexOf(t) !== -1, [id, text]);
+
+ui('スタッフを追加して定期条件(平日ランチ不可)を登録', async () => {
+  const s = await openShiftPage({ seed: (call) => call('saveShiftSettings', 'seed', SIMPLE_SETTINGS) });
+  try {
+    await s.login();
+    await s.page.click('[data-tab="staff"]');
+    await s.page.click('#staffAddBtn');
+    await s.page.fill('#staffName', '田中');
+    await s.page.fill('#staffTarget', '3');
+    await s.page.click('#recurringAddBtn');
+    const row = s.page.locator('#recurringRows .recurringRow').first();
+    for (const wd of [1, 2, 3, 4, 5]) await row.locator('input.rwd[value="' + wd + '"]').check();
+    await row.locator('select.rslot').selectOption('L');
+    await row.locator('select.rkind').selectOption('unavailable');
+    await s.page.click('#staffSaveBtn');
+    await waitMsg(s, 'staffMsg', '保存しました');
+    const b = boot(s);
+    const tanaka = b.staff.find((x) => x.name === '田中');
+    assert.equal(tanaka.targetDays, 3);
+    assert.deepEqual(b.recurring.map((r) => ({ staffId: r.staffId, weekdays: r.weekdays, slotId: r.slotId, kind: r.kind })),
+      [{ staffId: tanaka.id, weekdays: [1, 2, 3, 4, 5], slotId: 'L', kind: 'unavailable' }]);
+    assert.ok((await s.page.textContent('#staffList')).includes('田中'));
+    assert.deepEqual(s.errors(), []);
+  } finally { await s.close(); }
+});
+
+ui('在籍を外すと一覧で在籍外になる', async () => {
+  const s = await openShiftPage({ seed: (call) => { call('saveShiftSettings', 'seed', SIMPLE_SETTINGS); call('saveStaffMember', 'seed', staffIn('佐藤')); } });
+  try {
+    await s.login();
+    await s.page.click('[data-tab="staff"]');
+    await s.page.click('#staffList .staffItem');
+    await s.page.click('#staffActiveBtn');
+    await waitMsg(s, 'staffList', '在籍外');
+    assert.equal(boot(s).staff[0].active, false);
+  } finally { await s.close(); }
+});
+
+ui('担当なしの店では必要人数が1つだけ、担当ありなら担当ごと', async () => {
+  const s = await openShiftPage({ seed: (call) => call('saveShiftSettings', 'seed', SIMPLE_SETTINGS) });
+  try {
+    await s.login();
+    await s.page.click('[data-tab="settings"]');
+    assert.equal(await s.page.locator('.slotRow').first().locator('input.sreq').count(), 1);
+    await s.page.click('#posAddBtn');
+    await s.page.locator('#posRows .posRow input.pname').last().fill('ホール');
+    await s.page.click('#posAddBtn');
+    await s.page.locator('#posRows .posRow input.pname').last().fill('キッチン');
+    await s.page.locator('#posRows .posRow input.pname').last().dispatchEvent('change');
+    assert.equal(await s.page.locator('.slotRow').first().locator('input.sreq').count(), 2);
+  } finally { await s.close(); }
+});
+
+ui('枠と「一緒にしない」を保存', async () => {
+  let a, b;
+  const s = await openShiftPage({ seed: (call) => {
+    call('saveShiftSettings', 'seed', SIMPLE_SETTINGS);
+    a = call('saveStaffMember', 'seed', staffIn('A')).staff;
+    b = call('saveStaffMember', 'seed', staffIn('B')).staff;
+  } });
+  try {
+    await s.login();
+    await s.page.click('[data-tab="settings"]');
+    await s.page.click('#slotAddBtn');
+    const row = s.page.locator('.slotRow').last();
+    await row.locator('input.sname').fill('夜');
+    await row.locator('input.sstart').fill('17:00');
+    await row.locator('input.send').fill('01:00');
+    await row.locator('input.send').dispatchEvent('change');
+    assert.ok((await row.textContent()).includes('翌日まで'));
+    await row.locator('input.swd[value="5"]').check();
+    await row.locator('input.sreq').fill('2');
+    await s.page.click('#pairAddBtn');
+    const pr = s.page.locator('#pairRows .pairRow').first();
+    await pr.locator('select.pa').selectOption(a.id);
+    await pr.locator('select.pb').selectOption(b.id);
+    await s.page.fill('#minVeteran', '1');
+    await s.page.click('#settingsSaveBtn');
+    await waitMsg(s, 'settingsMsg', '保存しました');
+    const st = boot(s).settings;
+    assert.deepEqual(st.pairRules, [{ a: a.id, b: b.id, type: 'avoid' }]);
+    assert.equal(st.minVeteranPerSlot, 1);
+    const night = st.slots.find((x) => x.name === '夜');
+    assert.deepEqual([night.start, night.end, night.weekdays, night.required], ['17:00', '01:00', [5], { '': 2 }]);
+    assert.equal(st.slots.find((x) => x.name === 'ランチ').id, 'L'); // 既存の枠IDは変わらない
+  } finally { await s.close(); }
+});
+
+ui('検証エラーがそのまま表示される', async () => {
+  const s = await openShiftPage();
+  try {
+    await s.login();
+    await s.page.click('[data-tab="settings"]');
+    await s.page.click('#settingsSaveBtn');
+    await waitMsg(s, 'settingsMsg', '件目');
+    assert.equal(await s.page.textContent('#settingsMsg'), '1件目の枠名を入力してください。');
+  } finally { await s.close(); }
+});

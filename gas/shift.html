@@ -282,6 +282,275 @@
     }
   </script>
   <!-- ==== タブごとの処理(以下に追記) ==== -->
+  <style>
+    /* ---- スタッフ・枠と条件 ---- */
+    .list { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 12px; }
+    .staffItem { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--border); cursor: pointer; flex-wrap: wrap; }
+    .staffItem:last-child { border-bottom: none; }
+    .staffItem:hover { background: var(--bg); }
+    .staffItem .nm { font-weight: bold; min-width: 6em; }
+    .staffItem .meta { font-size: 12px; color: var(--muted); }
+    .staffItem.inactive { color: #aaa; }
+    .badge { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 999px; background: var(--edit-bg); color: var(--edit); }
+    .badge.gray { background: #eee; color: #888; }
+    .formBox { border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin: 12px 0; background: #fffdfb; }
+    .formGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0 12px; }
+    .formGrid input { width: 100%; }
+    .editRow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px dashed var(--border); }
+    .editRow input.sname, .editRow input.pname { width: 9em; }
+    .editRow input.sreq { width: 4.5em; }
+    .editRow .reqLabel { font-size: 12px; color: var(--muted); }
+    .overnight { font-size: 12px; color: var(--edit); }
+    .buttons { margin-top: 14px; display: flex; gap: 8px; flex-wrap: wrap; }
+  </style>
+  <script>
+    // ==================== スタッフ タブ ====================
+
+    function weekdayChecks(cls, selected) {
+      return '<span class="checks">' + WEEKDAY_LABELS.map(function (w, i) {
+        return '<label><input type="checkbox" class="' + cls + '" value="' + i + '"' +
+          ((selected || []).indexOf(i) !== -1 ? ' checked' : '') + '>' + w + '</label>';
+      }).join('') + '</span>';
+    }
+    function checkedWeekdays(row, cls) {
+      return Array.prototype.map.call(row.querySelectorAll('input.' + cls + ':checked'), function (c) { return Number(c.value); });
+    }
+    function slotOptions(selectedId, emptyLabel) {
+      var opts = emptyLabel !== null ? '<option value="">' + esc(emptyLabel) + '</option>' : '';
+      return opts + (STATE.data.settings.slots || []).map(function (sl) {
+        return '<option value="' + esc(sl.id) + '"' + (sl.id === selectedId ? ' selected' : '') + '>' + esc(sl.name) + '</option>';
+      }).join('');
+    }
+    function numOrEmpty(v) { return v === null || v === undefined ? '' : v; }
+
+    RENDER.staff = function () {
+      var staff = STATE.data.staff.slice().sort(function (a, b) { return (b.active - a.active); });
+      var html = '<h2>スタッフ</h2><p class="note">名前をタップすると編集できます。辞めた人は削除せず「在籍を外す」にすると、過去のシフトに名前が残ります。</p>';
+      html += '<div class="list" id="staffList">' + (staff.length ? staff.map(function (st) {
+        var meta = [];
+        if (st.positions.length) meta.push(st.positions.join('・'));
+        if (st.targetDays !== null) meta.push('目安 週' + st.targetDays + '日');
+        if (st.maxDays !== null) meta.push('上限 週' + st.maxDays + '日');
+        if (st.maxHours !== null) meta.push('上限 週' + st.maxHours + '時間');
+        return '<div class="staffItem' + (st.active ? '' : ' inactive') + '" data-staff-id="' + esc(st.id) + '">' +
+          '<span class="nm">' + esc(st.name) + '</span>' +
+          (st.veteran ? '<span class="badge">ベテラン</span>' : '') +
+          (st.active ? '' : '<span class="badge gray">在籍外</span>') +
+          '<span class="meta">' + esc(meta.join(' / ')) + '</span></div>';
+      }).join('') : '<div class="staffItem">まだスタッフがいません。</div>') + '</div>';
+      html += '<button id="staffAddBtn" class="primary">+ スタッフを追加</button>';
+      html += '<div id="staffFormWrap"></div><div id="staffMsg" class="msg"></div>';
+      el('tab-staff').innerHTML = html;
+      el('staffAddBtn').addEventListener('click', function () { openStaffForm(null); });
+      document.querySelectorAll('#staffList .staffItem[data-staff-id]').forEach(function (item) {
+        item.addEventListener('click', function () {
+          openStaffForm(STATE.data.staff.filter(function (s) { return s.id === item.dataset.staffId; })[0]);
+        });
+      });
+    };
+
+    function openStaffForm(st) {
+      var isNew = !st;
+      st = st || { id: '', name: '', positions: [], veteran: false, targetDays: null, maxDays: null, maxHours: null, active: true, note: '' };
+      var positions = STATE.data.settings.positions || [];
+      var html = '<div class="formBox" id="staffForm"><h2>' + (isNew ? 'スタッフを追加' : esc(st.name) + ' さんを編集') + '</h2>';
+      html += '<div class="formGrid">' +
+        '<div><label for="staffName">名前</label><input type="text" id="staffName" value="' + esc(st.name) + '"></div>' +
+        '<div><label for="staffTarget">週の目安日数</label><input type="number" min="0" max="7" step="0.5" id="staffTarget" value="' + numOrEmpty(st.targetDays) + '" placeholder="例: 3"></div>' +
+        '<div><label for="staffMaxDays">週の上限日数</label><input type="number" min="0" max="7" id="staffMaxDays" value="' + numOrEmpty(st.maxDays) + '" placeholder="なし"></div>' +
+        '<div><label for="staffMaxHours">週の上限時間</label><input type="number" min="0" step="0.5" id="staffMaxHours" value="' + numOrEmpty(st.maxHours) + '" placeholder="なし"></div>' +
+        '</div>';
+      if (positions.length) {
+        html += '<label>できる担当</label><span class="checks">' + positions.map(function (p) {
+          return '<label><input type="checkbox" class="staffPos" value="' + esc(p) + '"' + (st.positions.indexOf(p) !== -1 ? ' checked' : '') + '>' + esc(p) + '</label>';
+        }).join('') + '</span>';
+      }
+      html += '<label class="checks"><input type="checkbox" id="staffVeteran"' + (st.veteran ? ' checked' : '') + '>ベテラン(各枠に最低何人か入れたい人)</label>';
+      html += '<label for="staffNote">メモ</label><input type="text" id="staffNote" style="width:100%;" value="' + esc(st.note) + '">';
+      html += '<h2>いつもの条件(毎週くり返す)</h2><p class="note">例: 学生なので平日のランチは出られない、毎週水曜は休み。その日だけの希望は「希望・休み」タブで入れます(そちらが優先されます)。</p>';
+      html += '<div id="recurringRows"></div><button id="recurringAddBtn" class="small">+ 条件を追加</button>';
+      html += '<div class="buttons"><button id="staffSaveBtn" class="primary">保存</button><button id="staffCancelBtn">閉じる</button>' +
+        (isNew ? '' : '<button id="staffActiveBtn" class="danger">' + (st.active ? '在籍を外す' : '在籍に戻す') + '</button>') + '</div></div>';
+      el('staffFormWrap').innerHTML = html;
+
+      var rules = STATE.data.recurring.filter(function (r) { return r.staffId === st.id; });
+      rules.forEach(addRecurringRow);
+      el('recurringAddBtn').addEventListener('click', function () { addRecurringRow(null); });
+      el('staffCancelBtn').addEventListener('click', function () { el('staffFormWrap').innerHTML = ''; });
+      el('staffSaveBtn').addEventListener('click', function () { saveStaff(st); });
+      if (!isNew) {
+        el('staffActiveBtn').addEventListener('click', function () {
+          callServer('setStaffActive', TOKEN, st.id, !st.active).then(function (res) {
+            if (!res.success) { showMsg('staffMsg', res.message, true); return; }
+            reload().then(function () { showMsg('staffMsg', st.name + ' さんを' + (st.active ? '在籍外にしました。' : '在籍に戻しました。'), false); });
+          });
+        });
+      }
+      el('staffName').focus();
+    }
+
+    function addRecurringRow(rule) {
+      rule = rule || { weekdays: [], slotId: '', kind: 'unavailable', note: '' };
+      var row = document.createElement('div');
+      row.className = 'editRow recurringRow';
+      row.innerHTML = weekdayChecks('rwd', rule.weekdays) +
+        '<select class="rslot">' + slotOptions(rule.slotId, '終日') + '</select>' +
+        '<select class="rkind"><option value="unavailable"' + (rule.kind === 'unavailable' ? ' selected' : '') + '>出られない</option>' +
+        '<option value="prefer_off"' + (rule.kind === 'prefer_off' ? ' selected' : '') + '>できれば休み</option></select>' +
+        '<button class="small rdel" type="button">削除</button>';
+      row.querySelector('.rdel').addEventListener('click', function () { row.remove(); });
+      el('recurringRows').appendChild(row);
+    }
+
+    function saveStaff(st) {
+      var staff = {
+        id: st.id,
+        name: el('staffName').value,
+        positions: Array.prototype.map.call(document.querySelectorAll('.staffPos:checked'), function (c) { return c.value; }),
+        veteran: el('staffVeteran').checked,
+        targetDays: el('staffTarget').value, maxDays: el('staffMaxDays').value, maxHours: el('staffMaxHours').value,
+        active: st.active, note: el('staffNote').value,
+      };
+      var rules = Array.prototype.map.call(document.querySelectorAll('#recurringRows .recurringRow'), function (row) {
+        return { weekdays: checkedWeekdays(row, 'rwd'), slotId: row.querySelector('.rslot').value, kind: row.querySelector('.rkind').value, note: '' };
+      });
+      el('staffSaveBtn').disabled = true;
+      callServer('saveStaffMember', TOKEN, staff).then(function (res) {
+        if (!res.success) { el('staffSaveBtn').disabled = false; showMsg('staffMsg', res.message, true); return null; }
+        return callServer('saveRecurringRules', TOKEN, res.staff.id, rules).then(function (r2) {
+          if (!r2.success) {
+            el('staffSaveBtn').disabled = false;
+            // スタッフ自体は保存済みなので、次に保存したとき重複して追加されないよう ID を覚えておく
+            st.id = res.staff.id;
+            showMsg('staffMsg', r2.message, true);
+            return null;
+          }
+          return reload().then(function () { showMsg('staffMsg', res.staff.name + ' さんを保存しました。', false); });
+        });
+      });
+    }
+
+    // ==================== 枠と条件 タブ ====================
+
+    RENDER.settings = function () {
+      var st = STATE.data.settings;
+      var html = '<h2>担当(ポジション)</h2><p class="note">キッチン・ホールのように担当ごとに人数を決める場合だけ追加します。担当を使わない店は空のままで構いません。</p>';
+      html += '<div id="posRows"></div><button id="posAddBtn" class="small">+ 担当を追加</button>';
+      html += '<h2>シフト枠</h2><p class="note">ランチ・ディナー・通しなど、人を入れる時間の枠です。終了が開始より前なら翌日までの枠になります。使う曜日にチェックを入れてください。</p>';
+      html += '<div id="slotRows"></div><button id="slotAddBtn" class="small">+ 枠を追加</button>';
+      html += '<h2>一緒にしない組み合わせ</h2><p class="note">できるだけ同じ時間に入れないようにします。人が足りない日だけ同じ時間に入れ、シフト表に警告を出します。</p>';
+      html += '<div id="pairRows"></div><button id="pairAddBtn" class="small">+ 組み合わせを追加</button>';
+      html += '<h2>ベテラン</h2><div class="row">各枠にベテランを最低 <input type="number" id="minVeteran" min="0" style="width:5em;" value="' + (st.minVeteranPerSlot || 0) + '"> 人入れたい(0なら気にしない)</div>';
+      html += '<div class="buttons"><button id="settingsSaveBtn" class="primary">この内容で保存</button></div><div id="settingsMsg" class="msg"></div>';
+      el('tab-settings').innerHTML = html;
+
+      (st.positions || []).forEach(addPosRow);
+      var slots = st.slots && st.slots.length ? st.slots : [null];
+      slots.forEach(addSlotRow);
+      (st.pairRules || []).forEach(addPairRow);
+      el('posAddBtn').addEventListener('click', function () { addPosRow(''); });
+      el('slotAddBtn').addEventListener('click', function () { addSlotRow(null); });
+      el('pairAddBtn').addEventListener('click', function () { addPairRow(null); });
+      el('settingsSaveBtn').addEventListener('click', saveSettings);
+    };
+
+    function currentPositions() {
+      return Array.prototype.map.call(document.querySelectorAll('#posRows input.pname'), function (i) { return i.value.trim(); })
+        .filter(function (v) { return v; });
+    }
+
+    function addPosRow(name) {
+      var row = document.createElement('div');
+      row.className = 'editRow posRow';
+      row.innerHTML = '<input type="text" class="pname" placeholder="例: キッチン" value="' + esc(name) + '"><button class="small pdel" type="button">削除</button>';
+      row.querySelector('.pname').addEventListener('change', refreshSlotRequired);
+      row.querySelector('.pdel').addEventListener('click', function () { row.remove(); refreshSlotRequired(); });
+      el('posRows').appendChild(row);
+      refreshSlotRequired();
+    }
+
+    function requiredInputs(required) {
+      var positions = currentPositions();
+      if (!positions.length) {
+        return '<span class="reqLabel">必要人数</span><input type="number" min="0" class="sreq" data-pos="" value="' + ((required || {})[''] || '') + '">';
+      }
+      return positions.map(function (p) {
+        return '<span class="reqLabel">' + esc(p) + '</span><input type="number" min="0" class="sreq" data-pos="' + esc(p) + '" value="' + ((required || {})[p] || '') + '">';
+      }).join('');
+    }
+
+    function readRequired(row) {
+      var out = {};
+      row.querySelectorAll('input.sreq').forEach(function (i) { out[i.dataset.pos] = i.value === '' ? 0 : Number(i.value); });
+      return out;
+    }
+
+    /** 担当が変わったら、各枠の必要人数の入力欄を作り直す(入力済みの値は担当名で引き継ぐ) */
+    function refreshSlotRequired() {
+      document.querySelectorAll('#slotRows .slotRow').forEach(function (row) {
+        row.querySelector('.reqWrap').innerHTML = requiredInputs(readRequired(row));
+      });
+    }
+
+    function updateOvernight(row) {
+      var s = row.querySelector('.sstart').value, e = row.querySelector('.send').value;
+      row.querySelector('.overnight').textContent = (s && e && e <= s) ? '翌日まで' : '';
+    }
+
+    function addSlotRow(slot) {
+      slot = slot || { id: '', name: '', start: '', end: '', weekdays: [], required: {} };
+      var row = document.createElement('div');
+      row.className = 'editRow slotRow';
+      row.dataset.slotId = slot.id;
+      row.innerHTML = '<input type="text" class="sname" placeholder="例: ランチ" value="' + esc(slot.name) + '">' +
+        '<input type="time" class="sstart" value="' + esc(slot.start) + '">〜<input type="time" class="send" value="' + esc(slot.end) + '">' +
+        '<span class="overnight"></span>' + weekdayChecks('swd', slot.weekdays) +
+        '<span class="reqWrap">' + requiredInputs(slot.required) + '</span>' +
+        '<button class="small sdel" type="button">削除</button>';
+      ['.sstart', '.send'].forEach(function (sel) {
+        row.querySelector(sel).addEventListener('change', function () { updateOvernight(row); });
+      });
+      row.querySelector('.sdel').addEventListener('click', function () { row.remove(); });
+      el('slotRows').appendChild(row);
+      updateOvernight(row);
+    }
+
+    function staffOptions(selectedId) {
+      return '<option value="">選んでください</option>' + STATE.data.staff.filter(function (s) { return s.active || s.id === selectedId; })
+        .map(function (s) { return '<option value="' + esc(s.id) + '"' + (s.id === selectedId ? ' selected' : '') + '>' + esc(s.name) + '</option>'; }).join('');
+    }
+
+    function addPairRow(rule) {
+      rule = rule || { a: '', b: '' };
+      var row = document.createElement('div');
+      row.className = 'editRow pairRow';
+      row.innerHTML = '<select class="pa">' + staffOptions(rule.a) + '</select>と<select class="pb">' + staffOptions(rule.b) + '</select>' +
+        'はできれば同じ時間にしない<button class="small pdel2" type="button">削除</button>';
+      row.querySelector('.pdel2').addEventListener('click', function () { row.remove(); });
+      el('pairRows').appendChild(row);
+    }
+
+    function saveSettings() {
+      var settings = {
+        positions: Array.prototype.map.call(document.querySelectorAll('#posRows input.pname'), function (i) { return i.value; }),
+        slots: Array.prototype.map.call(document.querySelectorAll('#slotRows .slotRow'), function (row) {
+          return { id: row.dataset.slotId || '', name: row.querySelector('.sname').value,
+            start: row.querySelector('.sstart').value, end: row.querySelector('.send').value,
+            weekdays: checkedWeekdays(row, 'swd'), required: readRequired(row) };
+        }),
+        pairRules: Array.prototype.map.call(document.querySelectorAll('#pairRows .pairRow'), function (row) {
+          return { a: row.querySelector('.pa').value, b: row.querySelector('.pb').value, type: 'avoid' };
+        }),
+        minVeteranPerSlot: el('minVeteran').value,
+      };
+      el('settingsSaveBtn').disabled = true;
+      callServer('saveShiftSettings', TOKEN, settings).then(function (res) {
+        el('settingsSaveBtn').disabled = false;
+        if (!res.success) { showMsg('settingsMsg', res.message, true); return; }
+        reload().then(function () { showMsg('settingsMsg', '保存しました。', false); });
+      });
+    }
+  </script>
   <script>document.addEventListener('DOMContentLoaded', init);</script>
 </body>
 </html>
