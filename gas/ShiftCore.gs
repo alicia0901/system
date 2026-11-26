@@ -69,8 +69,8 @@ function shiftCoreFactory() {
   /**
    * 期間内の「日 × 枠 × 担当」のセル一覧を作る。
    * - 休業日は枠なし
-   * - その曜日を weekdays に含む枠を使う。含む枠が1つもない営業日(臨時営業日など)は、
-   *   営業時間帯と時間が重なる枠をすべて使う
+   * - その曜日を weekdays に含む枠を使う。含む枠が1つもない「特別な日」(business[date].special。
+   *   普段は定休の曜日の臨時営業日など)は、営業時間帯と時間が重なる枠をすべて使う
    * - dayOverrides の off で除き、on で足す
    */
   function buildCells(settings, dates, business, dayOverrides) {
@@ -85,7 +85,9 @@ function shiftCoreFactory() {
       if (!b || b.closed) return;
       const wd = weekdayOf(date);
       const byWeekday = slots.filter(function (s) { return (s.weekdays || []).indexOf(wd) !== -1; });
-      const base = byWeekday.length ? byWeekday : slots.filter(function (s) { return slotOverlapsPeriods(s, b.periods); });
+      const base = (byWeekday.length || !b.special)
+        ? byWeekday
+        : slots.filter(function (s) { return slotOverlapsPeriods(s, b.periods); });
       const baseIds = {};
       base.forEach(function (s) { baseIds[s.id] = true; });
 

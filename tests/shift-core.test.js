@@ -49,12 +49,15 @@ test('buildCells: 休業日は枠なし', () => {
     { '2026-11-30': { closed: true, note: '', periods: [] } }, []).length, 0);
 });
 
-test('buildCells: どの枠の曜日にも入っていない営業日は営業時間と重なる枠を全部出す', () => {
+test('buildCells: どの枠の曜日にも入っていない臨時営業日は営業時間と重なる枠を全部出す', () => {
   const settings = S({ slots: [
     { id: 'L', name: 'ランチ', start: '10:00', end: '15:00', weekdays: [2], required: { '': 1 } },
     { id: 'N', name: '深夜', start: '23:00', end: '02:00', weekdays: [2], required: { '': 1 } }] });
-  const cells = core().buildCells(settings, ['2026-11-30'], { '2026-11-30': open }, []);
+  const special = Object.assign({}, open, { special: true }); // 特別な日(臨時営業)
+  const cells = core().buildCells(settings, ['2026-11-30'], { '2026-11-30': special }, []);
   assert.deepEqual(plain(cells.map((c) => c.slotId)), ['L']);
+  // 特別な日でなければ(普段の営業日で、その曜日の枠を作っていないだけ)何も出さない
+  assert.equal(core().buildCells(settings, ['2026-11-30'], { '2026-11-30': open }, []).length, 0);
 });
 
 test('buildCells: 日別枠 off/on', () => {
